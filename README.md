@@ -1,0 +1,1 @@
+GAN for Tabular Data
