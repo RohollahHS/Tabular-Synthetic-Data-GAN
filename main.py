@@ -8,10 +8,10 @@ def parse_option():
 
     parser.add_argument('--model_type', type=str, 
                         help="model archeticture in Geneartor and Discriminator", 
-                        default='mlp', choices=['mlp','transformer'])
+                        default='transformer', choices=['mlp','transformer'])
     
-    parser.add_argument('--batch_size', type=int, default=60)
-    parser.add_argument('--n_epochs', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--n_epochs', type=int, default=3)
 
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')

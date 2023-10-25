@@ -97,8 +97,8 @@ def SVM(X_train, y_train, X_syn, y_syn, X_test_, y_test, kernel='linear', max_it
         for col in continous_columns:
             scaler = MinMaxScaler()
             scaler.fit(X_syn[col].values.reshape(-1, 1))
-            X_syn.loc[:, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
-            X_test.loc[:, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
+            X_syn.loc[X_syn.index, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
+            X_test.loc[X_test.index, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
     except:
         pass
 
@@ -143,8 +143,8 @@ def MLP(X_train, y_train, X_syn, y_syn, X_test_, y_test,
         for col in continous_columns:
             scaler = MinMaxScaler()
             scaler.fit(X_syn[col].values.reshape(-1, 1))
-            X_syn[col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
-            X_test[col] = scaler.transform(X_test[col].values.reshape(-1, 1))
+            X_syn.loc[X_syn.index, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
+            X_test.loc[X_test.index, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
     except:
         pass
 

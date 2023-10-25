@@ -166,7 +166,8 @@ class ScaleDotProductAttention(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, d_model, ffn_hidden, n_head, n_layers, drop_prob):
+    def __init__(self, d_model, ffn_hidden, n_head, n_layers, 
+                 drop_prob, type_encoder=None, data_dim=None):
         super().__init__()
 
         self.linear_1_to_d_model = nn.Linear(1, d_model)
@@ -176,8 +177,15 @@ class Encoder(nn.Module):
                                                   n_head=n_head,
                                                   drop_prob=drop_prob)
                                      for _ in range(n_layers)])
-
+        
         self.linear_d_model_to_1 = nn.Linear(d_model, 1)
+
+        self.type_encoder = type_encoder
+
+        if type_encoder == 'generator':
+            self.linear_z_dim_to_x_dim = nn.Linear(d_model, data_dim)
+        elif type_encoder == 'discriminator':
+            self.liear_x_dim_to_1 = nn.Linear(data_dim, 1)
 
     def forward(self, x, src_mask=None):
         x = self.linear_1_to_d_model(x.unsqueeze(-1))
@@ -186,4 +194,10 @@ class Encoder(nn.Module):
             x = layer(x, src_mask)
         
         x = self.linear_d_model_to_1(x).squeeze(-1)
+
+        if self.type_encoder == 'generator':
+            x = self.linear_z_dim_to_x_dim(x)
+        elif self.type_encoder == 'discriminator':
+            x = self.liear_x_dim_to_1(x)
+        
         return x
