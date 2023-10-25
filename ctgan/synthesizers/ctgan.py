@@ -8,13 +8,15 @@ import pandas as pd
 import torch
 from torch import optim
 from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequential, functional
-from tqdm import tqdm
+from tqdm.auto import trange
 
 from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from ctgan.synthesizers.transformer import Encoder
 from utils.save_records import save_loss_records
+from utils.save_load_model import load_checkpoint, save_model
+
 
 class Discriminator(Module):
     """Discriminator for the CTGAN."""
@@ -164,7 +166,7 @@ class CTGAN(BaseSynthesizer):
     def __init__(self, embedding_dim=128, generator_dim=(256, 256), discriminator_dim=(256, 256),
                  generator_lr=2e-4, generator_decay=1e-6, discriminator_lr=2e-4,
                  discriminator_decay=1e-6, batch_size=500, discriminator_steps=1,
-                 log_frequency=True, verbose=False, epochs=300, pac=10, cuda=True, model_type='mlp', args=None):
+                 log_frequency=True, verbose=True, epochs=300, pac=10, cuda=True, model_type='mlp', args=None):
 
         assert batch_size % 2 == 0
 
@@ -378,23 +380,39 @@ class CTGAN(BaseSynthesizer):
 
         self.loss_values = pd.DataFrame(columns=['Epoch', 'Generator Loss', 'Distriminator Loss'])
 
-        epoch_iterator = tqdm(range(epochs), disable=(not self._verbose))
-        if self._verbose:
-            description = 'Gen. ({gen:.2f}) | Discrim. ({dis:.2f})'
-            epoch_iterator.set_description(description.format(gen=0, dis=0))
-
         if not os.path.exists(self.args.output_path):
             os.mkdir(f'{self.args.output_path}')
         
         generator_file_name = 'generator_loss_records'
         discriminator_file_name = 'discriminator_loss_records'
-        save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
-        save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
+
+        if self.args.resume:
+            (
+            self._generator,
+            discriminator,
+            optimizerG, 
+            optimizerD,
+            curr_epoch,
+            generator_loss_list,
+            discriminator_loss_list,
+            ) = load_checkpoint(self.args.output_path, 
+                                self.args.model_name, 
+                                self._generator,
+                                discriminator,
+                                optimizerG,
+                                optimizerD,
+                                self._device)
+        
+        elif self.args.resume == False:
+            generator_loss_list = []
+            discriminator_loss_list = []
+            curr_epoch = 0
+            save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
+            save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
 
         steps_per_epoch = max(len(train_data) // self._batch_size, 1)
-        for i in epoch_iterator:
-            for id_ in range(steps_per_epoch):
-
+        for i in range(curr_epoch, epochs):
+            for id_ in trange(steps_per_epoch):
                 for n in range(self._discriminator_steps):
                     fakez = torch.normal(mean=mean, std=std)
 
@@ -470,12 +488,25 @@ class CTGAN(BaseSynthesizer):
             
             generator_loss = loss_g.detach().cpu()
             discriminator_loss = loss_d.detach().cpu()
-
-            print(f'Epoch: {i+1}/{epochs} | G Loss: {generator_loss:.3f} | D Loss: {discriminator_loss:.3f}')
             
             save_loss_records(self.args.output_path, generator_file_name, loss=generator_loss, epoch=i+1)
             save_loss_records(self.args.output_path, discriminator_file_name, loss=discriminator_loss, epoch=i+1)
 
+            print(f'Epoch: {i+1}/{epochs} | G Loss: {generator_loss:.3f} | D Loss: {discriminator_loss:.3f}')
+
+            generator_loss_list.append(generator_loss)
+            discriminator_loss_list.append(discriminator_loss)
+
+            save_model(self._generator,
+                       discriminator,
+                       optimizerG,
+                       optimizerD,
+                       i,
+                       generator_loss_list,
+                       discriminator_loss_list,
+                       self.args.output_path,
+                       self.args.model_name)
+            
             epoch_loss_df = pd.DataFrame({
                 'Epoch': [i],
                 'Generator Loss': [generator_loss],
@@ -487,11 +518,6 @@ class CTGAN(BaseSynthesizer):
                 ).reset_index(drop=True)
             else:
                 self.loss_values = epoch_loss_df
-
-            if self._verbose:
-                epoch_iterator.set_description(
-                    description.format(gen=generator_loss, dis=discriminator_loss)
-                )
 
     @random_state
     def sample(self, n, condition_column=None, condition_value=None):

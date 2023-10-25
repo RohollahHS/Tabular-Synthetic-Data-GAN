@@ -5,22 +5,22 @@ from data_transformer_evaluation import start_evaluation
 
 def parse_option():
     parser = argparse.ArgumentParser('Tabular Synthetic Data', add_help=False)
-    # easy config modification
+
     parser.add_argument('--model_type', type=str, 
                         help="model archeticture in Geneartor and Discriminator", 
                         default='mlp', choices=['mlp','transformer'])
+    
     parser.add_argument('--batch_size', type=int, default=60)
-    parser.add_argument('--n_epochs', type=int, default=3)
-    parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
-    parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
-    parser.add_argument('--all_data', type=str, default='no', choices=['yes, no'])
-    parser.add_argument('--resume', help='resume from checkpoint', default=True)
-    parser.add_argument('--output_path', default='data', type=str, metavar='PATH',
-                        help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
-    parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
+    parser.add_argument('--n_epochs', type=int, default=10)
 
-    parser.add_argument('--optim', type=str,
-                        help='overwrite optimizer if provided, can be adamw/sgd/fused_adam/fused_lamb.')
+    parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
+    parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
+    parser.add_argument('--output_path', default='data', type=str, metavar='PATH')
+
+    parser.add_argument('--all_data', type=str, default='no', choices=['yes, no'])
+
+    parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
+
     parser.add_argument("--model_name", type=str, default="Debugging")
 
     return parser.parse_args()
@@ -29,6 +29,9 @@ def parse_option():
 if __name__ == '__main__':
     args = parse_option()
 
+    for k, v in vars(args).items():
+        print(f'{k}: {v}')
+    print()
     # transforming features
     data = preprocessing(args.file_name, args.data_path)
 
