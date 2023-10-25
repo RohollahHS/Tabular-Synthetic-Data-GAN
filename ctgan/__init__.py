@@ -7,7 +7,6 @@ __email__ = 'info@sdv.dev'
 __version__ = '0.7.6.dev0'
 
 from ctgan.demo import load_demo
-from ctgan.data import post_processing
 from ctgan.synthesizers.ctgan import CTGAN
 from ctgan.synthesizers.tvae import TVAE
 
@@ -15,5 +14,4 @@ __all__ = (
     'CTGAN',
     'TVAE',
     'load_demo',
-    'post_processing'
 )

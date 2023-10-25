@@ -1,22 +1,18 @@
 import pandas as pd
-import sklearn as sk
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier  # Import Decision Tree Classifier
-from sklearn.model_selection import train_test_split  # Import train_test_split function
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split 
 from sklearn import svm
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MinMaxScaler
 from copy import deepcopy
-from sklearn import (
-    metrics,
-)  # Import scikit-learn metrics module for accuracy calculation
+from sklearn import metrics
+from tabulate import tabulate
 
 
-def read_preprocess_data(file_name="tickets"):
-    df = pd.read_csv(f"data/{file_name}.csv")
+
+def read_preprocess_data(file_name, dir_path):
+    df = pd.read_csv(f"{dir_path}/{file_name}.csv")
 
     date_columns = ["creation_date", "view_date", "action_date"]
 
@@ -74,6 +70,8 @@ def decesion_tree(X_train, y_train, X_syn, y_syn, X_test, y_test, max_depth=3):
     print(f"Original data accuracy on test set: {original_data_acc}")
     print(f"Synthetic data accuracy on test set: {synthetic_data_acc}")
 
+    return original_data_acc, synthetic_data_acc
+
 
 def SVM(X_train, y_train, X_syn, y_syn, X_test_, y_test, kernel='linear', max_iter=500):
     continous_columns = ['view_creation_distance_minute', 'action_view_distance_minute', 'delta_creation_date']
@@ -99,8 +97,8 @@ def SVM(X_train, y_train, X_syn, y_syn, X_test_, y_test, kernel='linear', max_it
         for col in continous_columns:
             scaler = MinMaxScaler()
             scaler.fit(X_syn[col].values.reshape(-1, 1))
-            X_syn[col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
-            X_test[col] = scaler.transform(X_test[col].values.reshape(-1, 1))
+            X_syn.loc[:, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
+            X_test.loc[:, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
     except:
         pass
 
@@ -112,6 +110,8 @@ def SVM(X_train, y_train, X_syn, y_syn, X_test_, y_test, kernel='linear', max_it
     print('\nSVM:')
     print(f"Original data accuracy on test set: {original_data_acc}")
     print(f"Synthetic data accuracy on test set: {synthetic_data_acc}")
+
+    return original_data_acc, synthetic_data_acc
 
 
 def MLP(X_train, y_train, X_syn, y_syn, X_test_, y_test,
@@ -161,6 +161,8 @@ def MLP(X_train, y_train, X_syn, y_syn, X_test_, y_test,
     print(f"Original data accuracy on test set: {original_data_acc}")
     print(f"Synthetic data accuracy on test set: {synthetic_data_acc}")
 
+    return original_data_acc, synthetic_data_acc
+
 
 
 def synthetic_evaluation(
@@ -170,7 +172,10 @@ def synthetic_evaluation(
     label_column="customer_problem_resolved",
     test_size=0.3,
     max_depth_tree=10,
-    kernel_svm='linear'
+    kernel_svm='linear',
+    max_iter_mlp=100,
+    dir_path='data',
+    model_name=None
 ):
     for col in drop_columns:
         original_data.drop(col, inplace=True, axis=1)
@@ -215,26 +220,52 @@ def synthetic_evaluation(
     y_synthetic = synthetic_data[label_column]
     y_synthetic = y_synthetic.values.astype(int)
 
-    decesion_tree(X_train, y_train, X_synthetic, y_synthetic, X_test, y_test, max_depth=max_depth_tree)
-    SVM(X_train, y_train, X_synthetic, y_synthetic, X_test, y_test, kernel=kernel_svm)
-    MLP(X_train, y_train, X_synthetic, y_synthetic, X_test, y_test)
+    origin_acc_dt,  syn_acc_dt  = decesion_tree(X_train, y_train, X_synthetic, y_synthetic, 
+                                                X_test, y_test, max_depth=max_depth_tree)
+    origin_acc_svm, syn_acc_svm = SVM(X_train, y_train, X_synthetic, y_synthetic, 
+                                      X_test, y_test, kernel=kernel_svm)
+    origin_acc_mlp, syn_acc_mlp = MLP(X_train, y_train, X_synthetic, y_synthetic, 
+                                      X_test, y_test, max_iter=max_iter_mlp)
+    
+
+    accs = [
+        ['Decision Tree', origin_acc_dt, syn_acc_dt],
+        ['SVM', origin_acc_svm, syn_acc_svm],
+        ['MLP', origin_acc_mlp, syn_acc_mlp]
+    ]
+
+    print(tabulate(accs, headers=[f"{model_name}", 
+                                  "Accuracy by Original Dataset", 
+                                  "Accuracy by Synthetic Dataset"]))
+
+    acc_records = open(f'{dir_path}/accuracy_records.txt', 'a')
+    acc_records.write(tabulate(accs, headers=[f"{model_name}", 
+                                    "Accuracy by Original Dataset", 
+                                    "Accuracy by Synthetic Dataset"]))
+    acc_records.write('\n')
+    acc_records.write(78*'_')
+    acc_records.write('\n\n')
+    
+    acc_records.close()
 
 
 
-original_data = read_preprocess_data("tickets")
-synthetic_data = read_preprocess_data("fianl_synthetic_data")
+def start_evaluation(file_name, dir_path, model_name):
+    original_data = read_preprocess_data(file_name, dir_path)
+    synthetic_data = read_preprocess_data(file_name, dir_path)
 
-# drop_columns = ['task_type', 'customer_satisfaction', 'user_actioned', 'user_team']
-drop_columns = []
+    # drop_columns = ['task_type', 'customer_satisfaction', 'user_actioned', 'user_team']
+    drop_columns = []
 
-synthetic_evaluation(
-    original_data,
-    synthetic_data,
-    drop_columns=drop_columns,
-    label_column="customer_problem_resolved",
-    test_size=0.3,
-    max_depth_tree=3,
-    kernel_svm='linear'
-)
-
-print('Finish')
+    synthetic_evaluation(
+        original_data,
+        synthetic_data,
+        drop_columns=drop_columns,
+        label_column="customer_problem_resolved",
+        test_size=0.3,
+        max_depth_tree=3,
+        kernel_svm='linear',
+        max_iter_mlp = 10,
+        dir_path=dir_path,
+        model_name=model_name
+    )

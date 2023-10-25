@@ -1,6 +1,7 @@
 """CTGAN module."""
 
 import warnings
+import os
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,7 @@ from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from ctgan.synthesizers.transformer import Encoder
-
+from utils.save_records import save_loss_records
 
 class Discriminator(Module):
     """Discriminator for the CTGAN."""
@@ -163,7 +164,7 @@ class CTGAN(BaseSynthesizer):
     def __init__(self, embedding_dim=128, generator_dim=(256, 256), discriminator_dim=(256, 256),
                  generator_lr=2e-4, generator_decay=1e-6, discriminator_lr=2e-4,
                  discriminator_decay=1e-6, batch_size=500, discriminator_steps=1,
-                 log_frequency=True, verbose=False, epochs=300, pac=10, cuda=True, model_type='mlp'):
+                 log_frequency=True, verbose=False, epochs=300, pac=10, cuda=True, model_type='mlp', args=None):
 
         assert batch_size % 2 == 0
 
@@ -184,6 +185,8 @@ class CTGAN(BaseSynthesizer):
         self.pac = pac
 
         self.model_type = model_type
+
+        self.args = args
 
         if not cuda or not torch.cuda.is_available():
             device = 'cpu'
@@ -358,6 +361,7 @@ class CTGAN(BaseSynthesizer):
         for p in discriminator.parameters():
             n += p.numel()
         print('Number of parameters for Discriminator:', n)
+        print()
 
         optimizerG = optim.Adam(
             self._generator.parameters(), lr=self._generator_lr, betas=(0.5, 0.9),
@@ -378,6 +382,14 @@ class CTGAN(BaseSynthesizer):
         if self._verbose:
             description = 'Gen. ({gen:.2f}) | Discrim. ({dis:.2f})'
             epoch_iterator.set_description(description.format(gen=0, dis=0))
+
+        if not os.path.exists(self.args.output_path):
+            os.mkdir(f'{self.args.output_path}')
+        
+        generator_file_name = 'generator_loss_records'
+        discriminator_file_name = 'discriminator_loss_records'
+        save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
+        save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
 
         steps_per_epoch = max(len(train_data) // self._batch_size, 1)
         for i in epoch_iterator:
@@ -461,6 +473,9 @@ class CTGAN(BaseSynthesizer):
 
             print(f'Epoch: {i+1}/{epochs} | G Loss: {generator_loss:.3f} | D Loss: {discriminator_loss:.3f}')
             
+            save_loss_records(self.args.output_path, generator_file_name, loss=generator_loss, epoch=i+1)
+            save_loss_records(self.args.output_path, discriminator_file_name, loss=discriminator_loss, epoch=i+1)
+
             epoch_loss_df = pd.DataFrame({
                 'Epoch': [i],
                 'Generator Loss': [generator_loss],
