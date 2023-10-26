@@ -17,6 +17,7 @@ def parse_option():
     parser.add_argument('--embedding_dim', type=int, default=42)
     parser.add_argument('--dis_hidden_size', type=int, default=256)
     parser.add_argument('--gen_hidden_size', type=int, default=256)
+    parser.add_argument('--display_intervals', type=int, default=1)
 
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
