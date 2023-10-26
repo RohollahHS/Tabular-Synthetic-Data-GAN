@@ -121,7 +121,7 @@ class DataTransformer(object):
         #  Converts the transformed data to the appropriate output format.
         #  The first column (ending in '.normalized') stays the same,
         #  but the lable encoded column (ending in '.component') is one hot encoded.
-        output = np.zeros((len(transformed), column_transform_info.output_dimensions))
+        output = np.zeros((len(transformed), column_transform_info.output_dimensions), dtype=np.float32)
         output[:, 0] = transformed[f'{column_name}.normalized'].to_numpy()
         index = transformed[f'{column_name}.component'].to_numpy().astype(int)
         output[np.arange(index.size), index + 1] = 1.0
@@ -185,8 +185,8 @@ class DataTransformer(object):
                 self._column_transform_info_list
             )
 
-        return np.concatenate(column_data_list, axis=1).astype(float)
-
+        return np.concatenate(column_data_list, axis=1).astype(np.float32)
+    
     def _inverse_transform_continuous(self, column_transform_info, column_data, sigmas, st):
         gm = column_transform_info.transform
         data = pd.DataFrame(column_data[:, :2], columns=list(gm.get_output_sdtypes()))

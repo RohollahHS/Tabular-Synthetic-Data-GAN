@@ -107,7 +107,7 @@ class CTGAN(BaseSynthesizer):
 
     @random_state
     def fit(self, train_data, discrete_columns=(), epochs=None):
-        # self._validate_discrete_columns(train_data, discrete_columns)
+        self._validate_discrete_columns(train_data, discrete_columns)
 
         num_epochs = self.args.n_epochs
 
@@ -118,7 +118,7 @@ class CTGAN(BaseSynthesizer):
 
         data_dim = self._transformer.output_dimensions
 
-        data_dim = 784
+        self.args.input_size = data_dim
 
         
         # generator_file_name = 'generator_loss_records'
@@ -158,22 +158,8 @@ class CTGAN(BaseSynthesizer):
         D.to(self.args.device)
         criterion.to(self.args.device)
 
-        if not os.path.exists('samples'):
-            os.mkdir('samples')
-
-        transform = transforms.Compose([
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean=(0.5),
-                                            std=(0.5))])
-
-        # MNIST dataset
-        mnist = datasets.MNIST(root='data/mnist',
-                                train=True,
-                                transform=transform,
-                                download=True)
-
         # Data loader
-        data_loader = torch.utils.data.DataLoader(dataset=mnist,
+        data_loader = torch.utils.data.DataLoader(dataset=train_data,
                                                 batch_size=self.args.batch_size, 
                                                 shuffle=True)
 
@@ -196,8 +182,6 @@ class CTGAN(BaseSynthesizer):
         batch_size = self.args.batch_size
         num_epochs = self.args.n_epochs
         latent_size = self.args.latent_size
-        save_dir = self.args.output_path
-        sample_dir = self.args.output_path
 
         d_losses = np.zeros(num_epochs)
         g_losses = np.zeros(num_epochs)
@@ -210,13 +194,13 @@ class CTGAN(BaseSynthesizer):
 
         total_step = len(data_loader)
         for epoch in range(num_epochs):
-            for i, (samples, _) in enumerate(data_loader):
+            for i, (samples) in enumerate(data_loader):
                 samples = Variable(samples.to(device))
 
                 # Create the labels which are later used as input for the BCE loss
-                real_labels = torch.ones(batch_size, 1).to(device)
+                real_labels = torch.ones(samples.shape[0], 1).to(device)
                 real_labels = Variable(real_labels)
-                fake_labels = torch.zeros(batch_size, 1).to(device)
+                fake_labels = torch.zeros(samples.shape[0], 1).to(device)
                 fake_labels = Variable(fake_labels)
 
                 # ================================================================== #
@@ -231,9 +215,9 @@ class CTGAN(BaseSynthesizer):
                 
                 # Compute BCELoss using fake samples
                 # First term of the loss is always zero since fake_labels == 0
-                z = torch.randn(batch_size, latent_size).to(device)
+                z = torch.randn(samples.shape[0], latent_size).to(device)
                 z = Variable(z)
-                fake_samples = torch.tanh(G(z))
+                fake_samples = self._apply_activate(G(z))
                 outputs = D(fake_samples)
                 d_loss_fake = criterion(outputs, fake_labels)
                 fake_score = outputs
@@ -249,9 +233,9 @@ class CTGAN(BaseSynthesizer):
                 # ================================================================== #
 
                 # Compute loss with fake samples
-                z = torch.randn(batch_size, latent_size).to(device)
+                z = torch.randn(samples.shape[0], latent_size).to(device)
                 z = Variable(z)
-                fake_samples = torch.tanh(G(z))
+                fake_samples = self._apply_activate(G(z))
                 outputs = D(fake_samples)
                 
                 # We train G to maximize log(D(G(z)) instead of minimizing log(1-D(G(z)))
@@ -271,7 +255,7 @@ class CTGAN(BaseSynthesizer):
                 real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
                 fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
                 
-                if (i+1) % 200 == 0:
+                if (i+1) % self.args.display_intervals == 0:
                     print('Epoch [{}/{}], Step [{}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
                         .format(epoch, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
                                 real_score.mean().item(), fake_score.mean().item()))

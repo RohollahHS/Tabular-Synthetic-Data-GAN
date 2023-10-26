@@ -49,7 +49,7 @@ if __name__ == '__main__':
     data = preprocessing(args.file_name, args.data_path)
 
     if args.all_data == 'no':
-        data = data.iloc[:1000]
+        data = data.iloc[:200]
 
     # Names of the columns that are discrete
     discrete_columns = ['task_type','customer_satisfaction',
