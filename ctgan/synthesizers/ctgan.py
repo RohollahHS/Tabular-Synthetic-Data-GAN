@@ -1,8 +1,10 @@
 """CTGAN module."""
 
-import warnings
 import os
+import torchvision.transforms as transforms
 
+from torchvision import datasets
+from torch import nn
 import numpy as np
 import pandas as pd
 import torch
@@ -27,34 +29,8 @@ class CTGAN(BaseSynthesizer):
 
         assert batch_size % 2 == 0
 
-        self._embedding_dim = args.embedding_dim
-        self._generator_dim = generator_dim
-        self._discriminator_dim = discriminator_dim
-
-        self._generator_lr = generator_lr
-        self._generator_decay = generator_decay
-        self._discriminator_lr = discriminator_lr
-        self._discriminator_decay = discriminator_decay
-
-        self._batch_size = batch_size
-        self._discriminator_steps = discriminator_steps
-        self._log_frequency = log_frequency
-        self._verbose = verbose
-        self._epochs = epochs
-        self.pac = pac
-
-        self.model_type = model_type
-
         self.args = args
-
-        if not cuda or not torch.cuda.is_available():
-            device = 'cpu'
-        elif isinstance(cuda, str):
-            device = cuda
-        else:
-            device = 'cuda'
-
-        self._device = torch.device(device)
+        self._device = torch.device(args.device)
 
         self._transformer = None
         self._data_sampler = None
@@ -131,7 +107,7 @@ class CTGAN(BaseSynthesizer):
 
     @random_state
     def fit(self, train_data, discrete_columns=(), epochs=None):
-        self._validate_discrete_columns(train_data, discrete_columns)
+        # self._validate_discrete_columns(train_data, discrete_columns)
 
         num_epochs = self.args.n_epochs
 
@@ -142,65 +118,86 @@ class CTGAN(BaseSynthesizer):
 
         data_dim = self._transformer.output_dimensions
 
-        self._generator = Generator(self._embedding_dim, 
-                                    self._generator_dim, 
-                                    data_dim, 
-                                    model_type=self.model_type,
-                                    args=self.args
-                                    ).to(self._device)
+        data_dim = 784
+
         
-        discriminator = Discriminator(data_dim, 
-                                      self._discriminator_dim, 
-                                      model_type=self.model_type, 
-                                      args=self.args
-                                      ).to(self._device)
+        # generator_file_name = 'generator_loss_records'
+        # discriminator_file_name = 'discriminator_loss_records'
+
+        # if self.args.resume:
+        #     (
+        #     self._generator,
+        #     discriminator,
+        #     g_optimizer, 
+        #     d_optimizer,
+        #     curr_epoch,
+        #     generator_loss_list,
+        #     discriminator_loss_list,
+        #     ) = load_checkpoint(self.args.output_path, 
+        #                         self.args.model_name, 
+        #                         self._generator,
+        #                         discriminator,
+        #                         g_optimizer,
+        #                         d_optimizer,
+        #                         self._device)
+        
+        # elif self.args.resume == False:
+        #     generator_loss_list = []
+        #     discriminator_loss_list = []
+        #     curr_epoch = 0
+        #     save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
+        #     save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
+
+        criterion = torch.nn.BCELoss()
+
+        # Initialize generator and discriminator
+        G = Generator(self.args)
+        D = Discriminator(self.args)
+
+        G.to(self.args.device)
+        D.to(self.args.device)
+        criterion.to(self.args.device)
+
+        if not os.path.exists('samples'):
+            os.mkdir('samples')
+
+        transform = transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean=(0.5),
+                                            std=(0.5))])
+
+        # MNIST dataset
+        mnist = datasets.MNIST(root='data/mnist',
+                                train=True,
+                                transform=transform,
+                                download=True)
+
+        # Data loader
+        data_loader = torch.utils.data.DataLoader(dataset=mnist,
+                                                batch_size=self.args.batch_size, 
+                                                shuffle=True)
+
+        # Optimizers
+        g_optimizer = torch.optim.Adam(G.parameters(), lr=self.args.lr)
+        d_optimizer = torch.optim.Adam(D.parameters(), lr=self.args.lr)
 
         n = 0
-        for p in self._generator.parameters():
+        for p in G.parameters():
             n += p.numel()
         print('Number of parameters for Generator:', n)
         
         n = 0
-        for p in discriminator.parameters():
+        for p in D.parameters():
             n += p.numel()
         print('Number of parameters for Discriminator:', n)
         print()
 
-        optimizerG = optim.Adam(self._generator.parameters(), lr=0.0002)
-        optimizerD = optim.Adam(discriminator.parameters(), lr=0.0002)
-        
-        generator_file_name = 'generator_loss_records'
-        discriminator_file_name = 'discriminator_loss_records'
-
-        if self.args.resume:
-            (
-            self._generator,
-            discriminator,
-            optimizerG, 
-            optimizerD,
-            curr_epoch,
-            generator_loss_list,
-            discriminator_loss_list,
-            ) = load_checkpoint(self.args.output_path, 
-                                self.args.model_name, 
-                                self._generator,
-                                discriminator,
-                                optimizerG,
-                                optimizerD,
-                                self._device)
-        
-        elif self.args.resume == False:
-            generator_loss_list = []
-            discriminator_loss_list = []
-            curr_epoch = 0
-            save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
-            save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
-
-        dataloader = torch.utils.data.DataLoader(train_data, batch_size=self.args.batch_size, shuffle=True)
-
-        criterion = torch.nn.BCELoss()
-
-        criterion.to(self._device)
+        device = self.args.device
+        batch_size = self.args.batch_size
+        num_epochs = self.args.n_epochs
+        latent_size = self.args.latent_size
+        save_dir = self.args.output_path
+        sample_dir = self.args.output_path
 
         d_losses = np.zeros(num_epochs)
         g_losses = np.zeros(num_epochs)
@@ -208,19 +205,18 @@ class CTGAN(BaseSynthesizer):
         fake_scores = np.zeros(num_epochs)
 
         def reset_grad():
-            optimizerD.zero_grad()
-            optimizerG.zero_grad()
+            d_optimizer.zero_grad()
+            g_optimizer.zero_grad()
 
-        total_step = len(dataloader)
-        for epoch in range(curr_epoch, num_epochs):
-            for i, samples in enumerate(dataloader):
-                samples = samples.to(torch.float32)
-                samples = Variable(samples.to(self._device))
+        total_step = len(data_loader)
+        for epoch in range(num_epochs):
+            for i, (samples, _) in enumerate(data_loader):
+                samples = Variable(samples.to(device))
 
                 # Create the labels which are later used as input for the BCE loss
-                real_labels = torch.ones(samples.shape[0], 1).to(self._device)
+                real_labels = torch.ones(batch_size, 1).to(device)
                 real_labels = Variable(real_labels)
-                fake_labels = torch.zeros(samples.shape[0], 1).to(self._device)
+                fake_labels = torch.zeros(batch_size, 1).to(device)
                 fake_labels = Variable(fake_labels)
 
                 # ================================================================== #
@@ -229,18 +225,16 @@ class CTGAN(BaseSynthesizer):
 
                 # Compute BCE_Loss using real samples where BCE_Loss(x, y): - y * log(D(x)) - (1-y) * log(1 - D(x))
                 # Second term of the loss is always zero since real_labels == 1
-                outputs = discriminator(samples)
+                outputs = D(samples)
                 d_loss_real = criterion(outputs, real_labels)
                 real_score = outputs
                 
                 # Compute BCELoss using fake samples
                 # First term of the loss is always zero since fake_labels == 0
-                z = torch.randn(samples.shape[0], self._embedding_dim).to(self._device)
+                z = torch.randn(batch_size, latent_size).to(device)
                 z = Variable(z)
-                fake_samples = self._generator(z)
-                fake_samples = self._apply_activate(fake_samples)
-
-                outputs = discriminator(fake_samples)
+                fake_samples = torch.tanh(G(z))
+                outputs = D(fake_samples)
                 d_loss_fake = criterion(outputs, fake_labels)
                 fake_score = outputs
                 
@@ -249,17 +243,16 @@ class CTGAN(BaseSynthesizer):
                 d_loss = d_loss_real + d_loss_fake
                 reset_grad()
                 d_loss.backward()
-                optimizerD.step()
+                d_optimizer.step()
                 # ================================================================== #
                 #                        Train the generator                         #
                 # ================================================================== #
 
                 # Compute loss with fake samples
-                z = torch.randn(samples.shape[0], self._embedding_dim).to(self._device)
+                z = torch.randn(batch_size, latent_size).to(device)
                 z = Variable(z)
-                fake_samples = self._generator(z)
-                fake_samples = self._apply_activate(fake_samples)
-                outputs = discriminator(fake_samples)
+                fake_samples = torch.tanh(G(z))
+                outputs = D(fake_samples)
                 
                 # We train G to maximize log(D(G(z)) instead of minimizing log(1-D(G(z)))
                 # For the reason, see the last paragraph of section 3. https://arxiv.org/pdf/1406.2661.pdf
@@ -269,7 +262,7 @@ class CTGAN(BaseSynthesizer):
                 # if G is trained so well, then don't update
                 reset_grad()
                 g_loss.backward()
-                optimizerG.step()
+                g_optimizer.step()
                 # =================================================================== #
                 #                          Update Statistics                          #
                 # =================================================================== #
@@ -278,7 +271,7 @@ class CTGAN(BaseSynthesizer):
                 real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
                 fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
                 
-                if (i+1) % self.args.display_intervals == 0:
+                if (i+1) % 200 == 0:
                     print('Epoch [{}/{}], Step [{}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
                         .format(epoch, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
                                 real_score.mean().item(), fake_score.mean().item()))
@@ -287,18 +280,18 @@ class CTGAN(BaseSynthesizer):
             save_plots(d_losses, g_losses, fake_scores, real_scores, 
                        num_epochs, self.args.output_path, self.args.model_name)
 
-            generator_loss_list.append(g_losses.tolist())
-            discriminator_loss_list.append(d_losses.tolist())
+            # generator_loss_list.append(g_losses.tolist())
+            # discriminator_loss_list.append(d_losses.tolist())
 
-            save_model(self._generator,
-                       discriminator,
-                       optimizerG,
-                       optimizerD,
-                       epoch,
-                       generator_loss_list,
-                       discriminator_loss_list,
-                       self.args.output_path,
-                       self.args.model_name)
+            # save_model(self._generator,
+            #            discriminator,
+            #            g_optimizer,
+            #            d_optimizer,
+            #            epoch,
+            #            generator_loss_list,
+            #            discriminator_loss_list,
+            #            self.args.output_path,
+            #            self.args.model_name)
             
     @random_state
     def sample(self, n):
@@ -315,9 +308,3 @@ class CTGAN(BaseSynthesizer):
         data = np.concatenate(data, axis=0)
 
         return self._transformer.inverse_transform(data)
-
-    def set_device(self, device):
-        """Set the `device` to be used ('GPU' or 'CPU)."""
-        self._device = device
-        if self._generator is not None:
-            self._generator.to(self._device)
