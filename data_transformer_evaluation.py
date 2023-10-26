@@ -97,8 +97,8 @@ def SVM(X_train, y_train, X_syn, y_syn, X_test_, y_test, kernel='linear', max_it
         for col in continous_columns:
             scaler = MinMaxScaler()
             scaler.fit(X_syn[col].values.reshape(-1, 1))
-            X_syn.loc[:, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
-            X_test.loc[:, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
+            X_syn.loc[X_syn.index, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
+            X_test.loc[X_test.index, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
     except:
         pass
 
@@ -143,8 +143,8 @@ def MLP(X_train, y_train, X_syn, y_syn, X_test_, y_test,
         for col in continous_columns:
             scaler = MinMaxScaler()
             scaler.fit(X_syn[col].values.reshape(-1, 1))
-            X_syn[col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
-            X_test[col] = scaler.transform(X_test[col].values.reshape(-1, 1))
+            X_syn.loc[X_syn.index, col] = scaler.transform(X_syn[col].values.reshape(-1, 1))
+            X_test.loc[X_test.index, col] = scaler.transform(X_test[col].values.reshape(-1, 1))
     except:
         pass
 
@@ -177,9 +177,9 @@ def synthetic_evaluation(
     dir_path='data',
     model_name=None
 ):
-    for col in drop_columns:
-        original_data.drop(col, inplace=True, axis=1)
-        synthetic_data.drop(col, inplace=True, axis=1)
+    # for col in drop_columns:
+    #     original_data.drop(col, inplace=True, axis=1)
+    #     synthetic_data.drop(col, inplace=True, axis=1)
 
     categorical_columns = []
     for col, dtype in zip(original_data.columns, original_data.dtypes):
@@ -227,45 +227,65 @@ def synthetic_evaluation(
     origin_acc_mlp, syn_acc_mlp = MLP(X_train, y_train, X_synthetic, y_synthetic, 
                                       X_test, y_test, max_iter=max_iter_mlp)
     
-
-    accs = [
-        ['Decision Tree', origin_acc_dt, syn_acc_dt],
-        ['SVM', origin_acc_svm, syn_acc_svm],
-        ['MLP', origin_acc_mlp, syn_acc_mlp]
-    ]
-
-    print(tabulate(accs, headers=[f"{model_name}", 
-                                  "Accuracy by Original Dataset", 
-                                  "Accuracy by Synthetic Dataset"]))
-
-    acc_records = open(f'{dir_path}/accuracy_records.txt', 'a')
-    acc_records.write(tabulate(accs, headers=[f"{model_name}", 
-                                    "Accuracy by Original Dataset", 
-                                    "Accuracy by Synthetic Dataset"]))
-    acc_records.write('\n')
-    acc_records.write(78*'_')
-    acc_records.write('\n\n')
-    
-    acc_records.close()
+    return origin_acc_dt, syn_acc_dt, origin_acc_svm, syn_acc_svm, origin_acc_mlp, syn_acc_mlp
 
 
-
-def start_evaluation(file_name, dir_path, model_name):
+def start_evaluation(file_name, dir_path, model_name, drop_column=False):
     original_data = read_preprocess_data(file_name, dir_path)
     synthetic_data = read_preprocess_data(file_name, dir_path)
 
-    # drop_columns = ['task_type', 'customer_satisfaction', 'user_actioned', 'user_team']
-    drop_columns = []
+    if drop_column:
+        drop_columns = ['task_type', 'customer_satisfaction', 'user_actioned', 'user_team']        
+        
+        for i in range(len(drop_columns)+1):
+            original_data_copy = original_data.drop(columns=drop_columns[:i], axis=1)
+            synthetic_data_copy = synthetic_data.drop(columns=drop_columns[:i], axis=1)
 
-    synthetic_evaluation(
-        original_data,
-        synthetic_data,
-        drop_columns=drop_columns,
-        label_column="customer_problem_resolved",
-        test_size=0.3,
-        max_depth_tree=3,
-        kernel_svm='linear',
-        max_iter_mlp = 10,
-        dir_path=dir_path,
-        model_name=model_name
-    )
+            (origin_acc_dt, 
+             syn_acc_dt, 
+             origin_acc_svm, 
+             syn_acc_svm, 
+             origin_acc_mlp, 
+             syn_acc_mlp) = synthetic_evaluation(original_data_copy,
+                                                 synthetic_data_copy,
+                                                 drop_columns=drop_columns,
+                                                 label_column="customer_problem_resolved",
+                                                 test_size=0.3,
+                                                 max_depth_tree=3,
+                                                 kernel_svm='linear',
+                                                 max_iter_mlp = 10,
+                                                 dir_path=dir_path,
+                                                 model_name=model_name)
+        
+            accs = [['DT', origin_acc_dt, syn_acc_dt],
+                    ['SVM', origin_acc_svm, syn_acc_svm],
+                    ['MLP', origin_acc_mlp, syn_acc_mlp]]
+
+            print(f'Dropped Columns: {drop_columns[:i]}')
+            print(tabulate(accs, headers=[f"{model_name}", 
+                                        "Original Data", 
+                                        "Synthetic Data"]))
+
+            acc_records = open(f'{dir_path}/accuracy_records.txt', 'a')
+            acc_records.write(f'Dropped Columns: {drop_columns[:i]}\n')
+            acc_records.write(tabulate(accs, headers=[f"{model_name}", 
+                                            "Original Data", 
+                                            "Synthetic Data"]))
+            acc_records.write('\n')
+            acc_records.write(78*'_')
+            acc_records.write('\n\n')
+            
+            acc_records.close()
+    
+    else:
+        synthetic_evaluation(
+            original_data,
+            synthetic_data,
+            drop_columns=drop_columns,
+            label_column="customer_problem_resolved",
+            test_size=0.3,
+            max_depth_tree=3,
+            kernel_svm='linear',
+            max_iter_mlp = 10,
+            dir_path=dir_path,
+            model_name=model_name)

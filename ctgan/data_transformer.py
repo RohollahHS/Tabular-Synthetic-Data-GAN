@@ -16,13 +16,7 @@ ColumnTransformInfo = namedtuple(
 
 
 class DataTransformer(object):
-    """Data Transformer.
-
-    Model continuous columns with a BayesianGMM and normalize them to a scalar between [-1, 1]
-    and a vector. Discrete columns are encoded using a OneHotEncoder.
-    """
-
-    def __init__(self, max_clusters=10, weight_threshold=0.005):
+    def __init__(self, max_clusters=5, weight_threshold=0.005):
         """Create a data transformer.
 
         Args:
@@ -91,13 +85,6 @@ class DataTransformer(object):
         self.output_info_list = []
         self.output_dimensions = 0
         self.dataframe = True
-
-        if not isinstance(raw_data, pd.DataFrame):
-            self.dataframe = False
-            # work around for RDT issue #328 Fitting with numerical column names fails
-            discrete_columns = [str(column) for column in discrete_columns]
-            column_names = [str(num) for num in range(raw_data.shape[1])]
-            raw_data = pd.DataFrame(raw_data, columns=column_names)
 
         self._column_raw_dtypes = raw_data.infer_objects().dtypes
         self._column_transform_info_list = []

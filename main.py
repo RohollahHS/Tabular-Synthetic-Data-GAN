@@ -23,15 +23,19 @@ def parse_option():
 
     parser.add_argument("--model_name", type=str, default="Debugging")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    
+    print('Args:')
+    for k, v in vars(args).items():
+        print(f'{k}: {v}')
+    print()
+
+    return args
 
 
 if __name__ == '__main__':
     args = parse_option()
 
-    for k, v in vars(args).items():
-        print(f'{k}: {v}')
-    print()
     # transforming features
     data = preprocessing(args.file_name, args.data_path)
 
@@ -57,4 +61,4 @@ if __name__ == '__main__':
     # save raw synthetic data and post processed synthetic data
     post_processing(synthetic_data, args.file_name, args.data_path)
 
-    start_evaluation(args.file_name, args.data_path, args.model_name)    
+    start_evaluation(args.file_name, args.data_path, args.model_name, True)    
