@@ -22,7 +22,7 @@ class DataTransformer(object):
     and a vector. Discrete columns are encoded using a OneHotEncoder.
     """
 
-    def __init__(self, max_clusters=10, weight_threshold=0.005):
+    def __init__(self, max_clusters=5, weight_threshold=0.005):
         """Create a data transformer.
 
         Args:

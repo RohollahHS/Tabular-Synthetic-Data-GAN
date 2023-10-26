@@ -182,9 +182,7 @@ class Encoder(nn.Module):
 
         self.type_encoder = type_encoder
 
-        if type_encoder == 'generator':
-            self.linear_z_dim_to_x_dim = nn.Linear(d_model, data_dim)
-        elif type_encoder == 'discriminator':
+        if type_encoder == 'discriminator':
             self.liear_x_dim_to_1 = nn.Linear(data_dim, 1)
 
     def forward(self, x, src_mask=None):
@@ -195,9 +193,7 @@ class Encoder(nn.Module):
         
         x = self.linear_d_model_to_1(x).squeeze(-1)
 
-        if self.type_encoder == 'generator':
-            x = self.linear_z_dim_to_x_dim(x)
-        elif self.type_encoder == 'discriminator':
+        if self.type_encoder == 'discriminator':
             x = self.liear_x_dim_to_1(x)
         
         return x

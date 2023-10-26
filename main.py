@@ -1,17 +1,22 @@
+import os
 import argparse
 from ctgan import CTGAN
 from utils.data_processing import preprocessing, post_processing
 from data_transformer_evaluation import start_evaluation
+
 
 def parse_option():
     parser = argparse.ArgumentParser('Tabular Synthetic Data', add_help=False)
 
     parser.add_argument('--model_type', type=str, 
                         help="model archeticture in Geneartor and Discriminator", 
-                        default='transformer', choices=['mlp','transformer'])
+                        default='mlp', choices=['mlp','transformer'])
     
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--n_epochs', type=int, default=3)
+    parser.add_argument('--embedding_dim', type=int, default=42)
+    parser.add_argument('--dis_hidden_size', type=int, default=256)
+    parser.add_argument('--gen_hidden_size', type=int, default=256)
 
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
@@ -23,15 +28,21 @@ def parse_option():
 
     parser.add_argument("--model_name", type=str, default="Debugging")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if not os.path.exists(args.output_path):
+        os.mkdir(f'{args.output_path}')
+
+    for k, v in vars(args).items():
+        print(f'{k}: {v}')
+    print()
+
+    return args
 
 
 if __name__ == '__main__':
     args = parse_option()
 
-    for k, v in vars(args).items():
-        print(f'{k}: {v}')
-    print()
     # transforming features
     data = preprocessing(args.file_name, args.data_path)
 
@@ -39,13 +50,8 @@ if __name__ == '__main__':
         data = data.iloc[:200]
 
     # Names of the columns that are discrete
-    discrete_columns = [
-        'task_type',
-        'customer_satisfaction',
-        'customer_problem_resolved',
-        'user_actioned',
-        'user_team',
-    ]
+    discrete_columns = ['task_type','customer_satisfaction',
+                        'customer_problem_resolved','user_actioned','user_team']
 
     ctgan = CTGAN(epochs=args.n_epochs, batch_size=args.batch_size, 
                   model_type=args.model_type, args=args)

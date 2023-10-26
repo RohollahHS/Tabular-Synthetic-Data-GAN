@@ -7,106 +7,27 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import optim
-from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequential, functional
-from tqdm.auto import tqdm
+from torch.nn import functional
 from torch.autograd import Variable
 
 from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
-from ctgan.synthesizers.transformer import Encoder
-from utils.save_records import save_loss_records
+from utils.save_records import save_loss_records, save_plots
 from utils.save_load_model import load_checkpoint, save_model
-import torch.nn.functional as F
-
-class Discriminator(Module):
-    """Discriminator for the CTGAN."""
-
-    def __init__(self, input_dim, discriminator_dim, model_type='mlp', 
-                 enc_dim=128, n_head=4, n_layers=2, drop_prob=0.5):
-        super(Discriminator, self).__init__()
-
-        if model_type == 'mlp':
-            seq = []
-            for item in list(discriminator_dim):
-                seq += [Linear(input_dim, item), LeakyReLU(0.2), Dropout(0.5)]
-                input_dim = item
-            seq += [Linear(input_dim, 1)]
-            self.dis = Sequential(*seq)
-        
-        elif model_type == 'transformer':
-            self.dis = Encoder(d_model=enc_dim,
-                                ffn_hidden=enc_dim*2,
-                                n_head=n_head,
-                                n_layers=n_layers,
-                                drop_prob=drop_prob,
-                                data_dim=input_dim,
-                                type_encoder='discriminator'
-                                )
-    
-    def forward(self, input_):
-        return F.sigmoid(self.dis(input_))
-
-
-class Residual(Module):
-    """Residual layer for the CTGAN."""
-
-    def __init__(self, i, o):
-        super(Residual, self).__init__()
-        self.fc = Linear(i, o)
-        self.bn = BatchNorm1d(o)
-        self.relu = ReLU()
-
-    def forward(self, input_):
-        """Apply the Residual layer to the `input_`."""
-        out = self.fc(input_)
-        out = self.bn(out)
-        out = self.relu(out)
-        return torch.cat([out, input_], dim=1)
-
-
-class Generator(Module):
-    """Generator for the CTGAN."""
-
-    def __init__(self, embedding_dim, generator_dim, data_dim, model_type='mlp',
-                 enc_dim=128, n_head=4, n_layers=2, drop_prob=0.5):
-        super(Generator, self).__init__()
-        dim = embedding_dim
-
-        if model_type == 'mlp':
-            seq = []
-            for item in list(generator_dim):
-                seq += [Residual(dim, item)]
-                dim += item
-            seq.append(Linear(dim, data_dim))
-            self.gen = Sequential(*seq)
-        
-        elif model_type == 'transformer':
-            self.gen = Encoder(d_model=enc_dim,
-                                ffn_hidden=enc_dim*2,
-                                n_head=n_head,
-                                n_layers=n_layers,
-                                drop_prob=drop_prob,
-                                data_dim=data_dim,
-                                type_encoder='generator'
-                                )
-    
-    def forward(self, input_):
-        """Apply the Generator to the `input_`."""
-        data = self.gen(input_)
-        return data
+from ctgan.synthesizers.modules import Generator, Discriminator
 
 
 class CTGAN(BaseSynthesizer):
 
-    def __init__(self, embedding_dim=128, generator_dim=(256, 256), discriminator_dim=(256, 256),
+    def __init__(self, embedding_dim=64, generator_dim=(256, 256), discriminator_dim=(256, 256),
                  generator_lr=2e-4, generator_decay=1e-6, discriminator_lr=2e-4,
                  discriminator_decay=1e-6, batch_size=500, discriminator_steps=1,
                  log_frequency=True, verbose=True, epochs=300, pac=10, cuda=True, model_type='mlp', args=None):
 
         assert batch_size % 2 == 0
 
-        self._embedding_dim = embedding_dim
+        self._embedding_dim = args.embedding_dim
         self._generator_dim = generator_dim
         self._discriminator_dim = discriminator_dim
 
@@ -138,8 +59,6 @@ class CTGAN(BaseSynthesizer):
         self._transformer = None
         self._data_sampler = None
         self._generator = None
-
-        self.loss_values = pd.DataFrame(columns=['Epoch', 'Generator Loss', 'Distriminator Loss'])
 
     @staticmethod
     def _gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
@@ -214,14 +133,7 @@ class CTGAN(BaseSynthesizer):
     def fit(self, train_data, discrete_columns=(), epochs=None):
         self._validate_discrete_columns(train_data, discrete_columns)
 
-        if epochs is None:
-            epochs = self._epochs
-        else:
-            warnings.warn(
-                ('`epochs` argument in `fit` method has been deprecated and will be removed '
-                 'in a future version. Please pass `epochs` to the constructor instead'),
-                DeprecationWarning
-            )
+        num_epochs = self.args.n_epochs
 
         self._transformer = DataTransformer()
         self._transformer.fit(train_data, discrete_columns)
@@ -230,18 +142,18 @@ class CTGAN(BaseSynthesizer):
 
         data_dim = self._transformer.output_dimensions
 
-        self._generator = Generator(
-            self._embedding_dim,
-            self._generator_dim,
-            data_dim,
-            model_type=self.model_type,
-        ).to(self._device)
-
-        discriminator = Discriminator(
-            data_dim,
-            self._discriminator_dim,
-            model_type=self.model_type,
-        ).to(self._device)
+        self._generator = Generator(self._embedding_dim, 
+                                    self._generator_dim, 
+                                    data_dim, 
+                                    model_type=self.model_type,
+                                    args=self.args
+                                    ).to(self._device)
+        
+        discriminator = Discriminator(data_dim, 
+                                      self._discriminator_dim, 
+                                      model_type=self.model_type, 
+                                      args=self.args
+                                      ).to(self._device)
 
         n = 0
         for p in self._generator.parameters():
@@ -254,23 +166,8 @@ class CTGAN(BaseSynthesizer):
         print('Number of parameters for Discriminator:', n)
         print()
 
-        optimizerG = optim.Adam(
-            self._generator.parameters(), lr=self._generator_lr, betas=(0.5, 0.9),
-            weight_decay=self._generator_decay
-        )
-
-        optimizerD = optim.Adam(
-            discriminator.parameters(), lr=self._discriminator_lr,
-            betas=(0.5, 0.9), weight_decay=self._discriminator_decay
-        )
-
-        mean = torch.zeros(self._batch_size, self._embedding_dim, device=self._device)
-        std = mean + 1
-
-        self.loss_values = pd.DataFrame(columns=['Epoch', 'Generator Loss', 'Distriminator Loss'])
-
-        if not os.path.exists(self.args.output_path):
-            os.mkdir(f'{self.args.output_path}')
+        optimizerG = optim.Adam(self._generator.parameters(), lr=0.0002)
+        optimizerD = optim.Adam(discriminator.parameters(), lr=0.0002)
         
         generator_file_name = 'generator_loss_records'
         discriminator_file_name = 'discriminator_loss_records'
@@ -301,86 +198,112 @@ class CTGAN(BaseSynthesizer):
 
         dataloader = torch.utils.data.DataLoader(train_data, batch_size=self.args.batch_size, shuffle=True)
 
-        Tensor = torch.cuda.FloatTensor if self._device.type == 'cuda' else torch.FloatTensor
+        criterion = torch.nn.BCELoss()
 
-        adversarial_loss = torch.nn.BCELoss()
+        criterion.to(self._device)
 
-        if self._device.type == 'cuda':
-            adversarial_loss.cuda()
+        d_losses = np.zeros(num_epochs)
+        g_losses = np.zeros(num_epochs)
+        real_scores = np.zeros(num_epochs)
+        fake_scores = np.zeros(num_epochs)
 
-        for i in range(curr_epoch, epochs):
-            for records in dataloader:
-                for n in range(self._discriminator_steps):
+        def reset_grad():
+            optimizerD.zero_grad()
+            optimizerG.zero_grad()
 
-                    # Adversarial ground truths
-                    valid = Variable(Tensor(records.size(0), 1).fill_(1.0), requires_grad=False)
-                    fake = Variable(Tensor(records.size(0), 1).fill_(0.0), requires_grad=False)
+        total_step = len(dataloader)
+        for epoch in range(curr_epoch, num_epochs):
+            for i, samples in enumerate(dataloader):
+                samples = samples.to(torch.float32)
+                samples = Variable(samples.to(self._device))
 
-                    # Configure input
-                    real_records = Variable(records.type(Tensor))
+                # Create the labels which are later used as input for the BCE loss
+                real_labels = torch.ones(samples.shape[0], 1).to(self._device)
+                real_labels = Variable(real_labels)
+                fake_labels = torch.zeros(samples.shape[0], 1).to(self._device)
+                fake_labels = Variable(fake_labels)
 
-                    # -----------------
-                    #  Train Generator
-                    # -----------------
-                    optimizerG.zero_grad()
+                # ================================================================== #
+                #                      Train the discriminator                       #
+                # ================================================================== #
 
-                    # Sample noise as generator input
-                    z = Variable(Tensor(np.random.normal(0, 1, (records.shape[0], self._embedding_dim))))
+                # Compute BCE_Loss using real samples where BCE_Loss(x, y): - y * log(D(x)) - (1-y) * log(1 - D(x))
+                # Second term of the loss is always zero since real_labels == 1
+                outputs = discriminator(samples)
+                d_loss_real = criterion(outputs, real_labels)
+                real_score = outputs
+                
+                # Compute BCELoss using fake samples
+                # First term of the loss is always zero since fake_labels == 0
+                z = torch.randn(samples.shape[0], self._embedding_dim).to(self._device)
+                z = Variable(z)
+                fake_samples = self._generator(z)
+                outputs = discriminator(fake_samples)
+                d_loss_fake = criterion(outputs, fake_labels)
+                fake_score = outputs
+                
+                # Backprop and optimize
+                # If D is trained so well, then don't update
+                d_loss = d_loss_real + d_loss_fake
+                reset_grad()
+                d_loss.backward()
+                optimizerD.step()
+                # ================================================================== #
+                #                        Train the generator                         #
+                # ================================================================== #
 
-                    # Generate a batch of images
-                    gen_records = self._generator(z)
+                # Compute loss with fake samples
+                z = torch.randn(samples.shape[0], self._embedding_dim).to(self._device)
+                z = Variable(z)
+                fake_samples = self._generator(z)
+                outputs = discriminator(fake_samples)
+                
+                # We train G to maximize log(D(G(z)) instead of minimizing log(1-D(G(z)))
+                # For the reason, see the last paragraph of section 3. https://arxiv.org/pdf/1406.2661.pdf
+                g_loss = criterion(outputs, real_labels)
+                
+                # Backprop and optimize
+                # if G is trained so well, then don't update
+                reset_grad()
+                g_loss.backward()
+                optimizerG.step()
+                # =================================================================== #
+                #                          Update Statistics                          #
+                # =================================================================== #
+                d_losses[epoch] = d_losses[epoch]*(i/(i+1.)) + d_loss.item()*(1./(i+1.))
+                g_losses[epoch] = g_losses[epoch]*(i/(i+1.)) + g_loss.item()*(1./(i+1.))
+                real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
+                fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
+                
+                if (i+1) % 1 == 0:
+                    print('Epoch [{}/{}], Step [{}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+                        .format(epoch, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
+                                real_score.mean().item(), fake_score.mean().item()))
 
-                    # Loss measures generator's ability to fool the discriminator
-                    # dis_gen_output = discriminator(gen_records)
-                    g_loss = adversarial_loss(discriminator(gen_records), valid)
+            # Save and plot Statistics
+            save_plots(d_losses, g_losses, fake_scores, real_scores, 
+                       num_epochs, self.args.output_path, self.args.model_name)
 
-                    g_loss.backward()
-                    optimizerG.step()
-
-
-                    # ---------------------
-                    #  Train Discriminator
-                    # ---------------------
-                    optimizerD.zero_grad()
-
-                    # Measure discriminator's ability to classify real from generated samples
-                    real_loss = adversarial_loss(discriminator(real_records), valid)
-                    fake_loss = adversarial_loss(discriminator(gen_records.detach()), fake)
-                    d_loss = (real_loss + fake_loss) / 2
-
-                    d_loss.backward()
-                    optimizerD.step()
-
-            generator_loss = g_loss.detach().cpu()
-            discriminator_loss = d_loss.detach().cpu()
-            
-            save_loss_records(self.args.output_path, generator_file_name, loss=generator_loss, epoch=i+1)
-            save_loss_records(self.args.output_path, discriminator_file_name, loss=discriminator_loss, epoch=i+1)
-
-            print(f'Epoch: {i+1}/{epochs} | G Loss: {generator_loss:.3f} | D Loss: {discriminator_loss:.3f}')
-
-            generator_loss_list.append(generator_loss)
-            discriminator_loss_list.append(discriminator_loss)
+            generator_loss_list.append(g_losses.tolist())
+            discriminator_loss_list.append(d_losses.tolist())
 
             save_model(self._generator,
                        discriminator,
                        optimizerG,
                        optimizerD,
-                       i,
+                       epoch,
                        generator_loss_list,
                        discriminator_loss_list,
                        self.args.output_path,
                        self.args.model_name)
             
-
     @random_state
     def sample(self, n):
-        Tensor = torch.cuda.FloatTensor if self._device.type == 'cuda' else torch.FloatTensor
-
         steps = n // self._batch_size + 1
         data = []
         for _ in range(steps):
-            z = Variable(Tensor(np.random.normal(0, 1, (self._batch_size, self._embedding_dim))))
+
+            z = Variable(torch.randn(self._batch_size, self._embedding_dim).to(self._device))
 
             fake = self._generator(z)
             fakeact = self._apply_activate(fake)
