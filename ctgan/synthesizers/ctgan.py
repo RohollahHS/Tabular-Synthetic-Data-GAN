@@ -133,19 +133,30 @@ class CTGAN(BaseSynthesizer):
         d_optimizer = torch.optim.Adam(D.parameters(), lr=self.args.lr)
 
         if self.args.resume:
-            self.G, D, g_optimizer, d_optimizer, curr_epoch = load_checkpoint(
-                self.args.output_path, 
-                self.args.model_name, 
-                self.G,
-                D,
-                g_optimizer,
-                d_optimizer,
-                self._device)
+            (self.G, 
+             D, 
+             g_optimizer, 
+             d_optimizer, 
+             curr_epoch, 
+             d_losses, 
+             g_losses, 
+             real_scores, 
+             fake_scores) = load_checkpoint(self.args.output_path, 
+                                            self.args.model_name, 
+                                            self.G,
+                                            D,
+                                            g_optimizer,
+                                            d_optimizer,
+                                            self._device)
         
         elif self.args.resume == False:
             init_weights(self.G)
             init_weights(D)
             curr_epoch = 0
+            d_losses = np.zeros(num_epochs)
+            g_losses = np.zeros(num_epochs)
+            real_scores = np.zeros(num_epochs)
+            fake_scores = np.zeros(num_epochs)
 
         # Data loader
         data_loader = torch.utils.data.DataLoader(dataset=train_data,
@@ -170,11 +181,6 @@ class CTGAN(BaseSynthesizer):
         device = self.args.device
         num_epochs = self.args.n_epochs
         latent_size = self.args.latent_size
-
-        d_losses = np.zeros(num_epochs)
-        g_losses = np.zeros(num_epochs)
-        real_scores = np.zeros(num_epochs)
-        fake_scores = np.zeros(num_epochs)
 
         def reset_grad():
             d_optimizer.zero_grad()
@@ -252,18 +258,17 @@ class CTGAN(BaseSynthesizer):
             save_plots(d_losses, g_losses, fake_scores, real_scores, 
                     epoch, self.args.output_path, self.args.model_name)
 
-            # generator_loss_list.append(g_losses.tolist())
-            # discriminator_loss_list.append(d_losses.tolist())
-
             save_model(self.G,
                        D,
                        g_optimizer,
                        d_optimizer,
                        epoch,
-                       g_losses.tolist(),
-                       d_losses.tolist(),
                        self.args.output_path,
-                       self.args.model_name)
+                       self.args.model_name,
+                       d_losses,
+                       g_losses,
+                       real_scores,
+                       fake_scores,)
             
     @random_state
     def sample(self, n):

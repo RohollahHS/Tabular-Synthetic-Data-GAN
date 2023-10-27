@@ -16,10 +16,14 @@ def load_checkpoint(checkpoint_address,
     g_optimizer.load_state_dict(checkpoint['optimizer_g_state_dict'])
     d_optimizer.load_state_dict(checkpoint['optimizer_d_state_dict'])
     curr_epoch = checkpoint['epoch']
+    d_losses = checkpoint['d_losses']
+    g_losses = checkpoint['g_losses']
+    real_scores = checkpoint['real_scores']
+    fake_scores = checkpoint['fake_scores']
 
     print('\nChekcpoint Loaded Successfully!\n')
     
-    return G, D, g_optimizer, d_optimizer, curr_epoch
+    return G, D, g_optimizer, d_optimizer, curr_epoch, d_losses, g_losses, real_scores, fake_scores
 
 
 def save_model(
@@ -28,10 +32,12 @@ def save_model(
     optimizer_g,
     optimizer_d,
     epoch,
-    generator_loss,
-    discriminator_loss,
     save_dir,
-    model_name
+    model_name,
+    d_losses,
+    g_losses,
+    real_scores,
+    fake_scores,
 ):
     """
     Function to save the trained model till current epoch, or whenver called
@@ -43,8 +49,10 @@ def save_model(
             "discriminator_state_dict": discriminator.state_dict(),
             "optimizer_g_state_dict": optimizer_g.state_dict(),
             "optimizer_d_state_dict": optimizer_d.state_dict(),
-            "generator_loss": generator_loss,
-            "discriminator_loss": discriminator_loss,
+            "d_losses": d_losses,
+            "g_losses": g_losses,
+            "real_scores": real_scores,
+            "fake_scores": fake_scores,
         },
         f"{save_dir}/last_{model_name}.pth",
     )
