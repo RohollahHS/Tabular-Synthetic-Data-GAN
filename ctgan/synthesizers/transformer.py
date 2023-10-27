@@ -172,11 +172,15 @@ class Encoder(nn.Module):
 
         self.linear_1_to_d_model = nn.Linear(1, d_model)
 
-        self.layers = nn.ModuleList([EncoderLayer(d_model=d_model,
-                                                  ffn_hidden=ffn_hidden,
-                                                  n_head=n_head,
-                                                  drop_prob=drop_prob)
-                                     for _ in range(n_layers)])
+        self.layers = nn.ModuleList(
+            [
+                EncoderLayer(d_model=d_model,
+                ffn_hidden=ffn_hidden,
+                n_head=n_head,
+                drop_prob=drop_prob)
+                for _ in range(n_layers)
+             ]
+             )
         
         self.linear_d_model_to_1 = nn.Linear(d_model, 1)
 
@@ -194,6 +198,6 @@ class Encoder(nn.Module):
         x = self.linear_d_model_to_1(x).squeeze(-1)
 
         if self.type_encoder == 'discriminator':
-            x = self.liear_x_dim_to_1(x)
+            x = torch.sigmoid(self.liear_x_dim_to_1(x))
         
         return x

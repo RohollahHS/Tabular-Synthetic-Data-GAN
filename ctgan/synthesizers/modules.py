@@ -89,16 +89,23 @@ from ctgan.synthesizers.transformer import Encoder
 class Generator(nn.Module):
     def __init__(self,  args):
         super(Generator, self).__init__()
-        input_size = args.input_size
-        latent_size = args.latent_size
-        hidden_size = args.hidden_size
-
-        self.model = nn.Sequential(
-                    nn.Linear(latent_size, hidden_size),
-                    nn.ReLU(),
-                    nn.Linear(hidden_size, hidden_size),
-                    nn.ReLU(),
-                    nn.Linear(hidden_size, input_size))
+        
+        if args.model_type == 'mlp':
+            self.model = nn.Sequential(
+                        nn.Linear(args.latent_size, args.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(args.hidden_size, args.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(args.hidden_size, args.input_size))
+        
+        elif args.model_type == 'transformer':
+            self.model = Encoder(d_model=args.hidden_size,
+                                 ffn_hidden=args.hidden_size*2,
+                                 n_head=4,
+                                 n_layers=2,
+                                 drop_prob=0.2,
+                                 data_dim=args.input_size,
+                                 type_encoder='generator')
 
     def forward(self, z):
         x = self.model(z)
@@ -109,16 +116,23 @@ class Discriminator(nn.Module):
     def __init__(self, args):
         super(Discriminator, self).__init__()
 
-        input_size = args.input_size
-        hidden_size = args.hidden_size
-
-        self.model = nn.Sequential(
-                    nn.Linear(input_size, hidden_size),
-                    nn.LeakyReLU(0.2),
-                    nn.Linear(hidden_size, hidden_size),
-                    nn.LeakyReLU(0.2),
-                    nn.Linear(hidden_size, 1),
-                    nn.Sigmoid())
+        if args.model_type == 'mlp':
+            self.model = nn.Sequential(
+                        nn.Linear(args.input_size, args.hidden_size),
+                        nn.LeakyReLU(0.2),
+                        nn.Linear(args.hidden_size, args.hidden_size),
+                        nn.LeakyReLU(0.2),
+                        nn.Linear(args.hidden_size, 1),
+                        nn.Sigmoid())
+        
+        elif args.model_type == 'transformer':
+            self.model = Encoder(d_model=args.hidden_size,
+                                 ffn_hidden=args.hidden_size*2,
+                                 n_head=4,
+                                 n_layers=2,
+                                 drop_prob=0.2,
+                                 data_dim=args.input_size,
+                                 type_encoder='discriminator')
 
     def forward(self, x):
         x = x.view(x.size(0), -1)

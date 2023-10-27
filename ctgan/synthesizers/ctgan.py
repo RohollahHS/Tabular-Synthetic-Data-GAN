@@ -180,7 +180,10 @@ class CTGAN(BaseSynthesizer):
 
         device = self.args.device
         num_epochs = self.args.n_epochs
-        latent_size = self.args.latent_size
+        if self.args.model_type == 'transformer':
+            latent_size = data_dim
+        elif self.args.mdeol_type == 'mlp':
+            latent_size = self.args.latent_size
 
         def reset_grad():
             d_optimizer.zero_grad()

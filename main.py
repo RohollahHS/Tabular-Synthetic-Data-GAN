@@ -21,9 +21,8 @@ def parse_option():
                         help='input_size for discriminator and output size for generator')
     parser.add_argument('--model_type', type=str, 
                         help="model archeticture in Geneartor and Discriminator", 
-                        default='mlp', choices=['mlp','transformer'])
-
-    parser.add_argument('--one_hot_smoothing', type=bool, default=True, choices=[True, False])
+                        default='transformer', choices=['mlp','transformer'])
+    parser.add_argument('--one_hot_smoothing', type=bool, default=False, choices=[True, False])
     parser.add_argument('--uniform_gama', type=float, default=0.2)
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
