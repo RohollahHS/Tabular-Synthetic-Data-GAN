@@ -38,18 +38,18 @@ def preprocessing(file_name, data_path):
 
 def post_processing(synthetic_data, file_name, data_path):
     indexs = synthetic_data[synthetic_data['creation_date_month'] <= 0]['creation_date_month'].index
-    synthetic_data.loc[indexs, 'creation_date_month'] = 0
+    synthetic_data.loc[indexs, 'creation_date_month'] = 1
     indexs = synthetic_data[synthetic_data['creation_date_month'] >= 13]['creation_date_month'].index
     synthetic_data.loc[indexs, 'creation_date_month'] = 12
 
     indexs = synthetic_data[synthetic_data['creation_date_day'] <= 0]['creation_date_day'].index
-    synthetic_data.loc[indexs, 'creation_date_day'] = 0
+    synthetic_data.loc[indexs, 'creation_date_day'] = 1
     indexs = synthetic_data[synthetic_data['creation_date_day'] >= 32]['creation_date_day'].index
     synthetic_data.loc[indexs, 'creation_date_day'] = 31
 
     indexs = synthetic_data[synthetic_data['creation_date_hour'] < 0]['creation_date_hour'].index
     synthetic_data.loc[indexs, 'creation_date_hour'] = 0
-    indexs = synthetic_data[synthetic_data['creation_date_hour'] >= 23]['creation_date_hour'].index
+    indexs = synthetic_data[synthetic_data['creation_date_hour'] >= 24]['creation_date_hour'].index
     synthetic_data.loc[indexs, 'creation_date_hour'] = 0
 
     indexs = synthetic_data[synthetic_data['creation_date_minute'] < 0]['creation_date_minute'].index

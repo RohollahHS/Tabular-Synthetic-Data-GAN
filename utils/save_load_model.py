@@ -1,25 +1,29 @@
-import torch
+from torch import load, save
+from numpy import zeros
 
-
-def load_checkpoint(checkpoint_address,
-                    model_name,
+def load_checkpoint(args,
                     G,
                     D,
                     g_optimizer,
-                    d_optimizer,
-                    device):
+                    d_optimizer):
     
-    checkpoint = torch.load(f'{checkpoint_address}/last_{model_name}.pth', device)
+    checkpoint = load(f'{args.output_path}/last_{args.model_name}.pth', args.device)
 
     G.load_state_dict(checkpoint['generator_state_dict'])
     D.load_state_dict(checkpoint['discriminator_state_dict'])
     g_optimizer.load_state_dict(checkpoint['optimizer_g_state_dict'])
     d_optimizer.load_state_dict(checkpoint['optimizer_d_state_dict'])
     curr_epoch = checkpoint['epoch']
-    d_losses = checkpoint['d_losses']
-    g_losses = checkpoint['g_losses']
-    real_scores = checkpoint['real_scores']
-    fake_scores = checkpoint['fake_scores']
+
+    d_losses = zeros(args.n_epochs)
+    g_losses = zeros(args.n_epochs)
+    real_scores = zeros(args.n_epochs)
+    fake_scores = zeros(args.n_epochs)
+
+    d_losses[:curr_epoch] = checkpoint['d_losses'][:curr_epoch]
+    g_losses[:curr_epoch] = checkpoint['g_losses'][:curr_epoch]
+    real_scores[:curr_epoch] = checkpoint['real_scores'][:curr_epoch]
+    fake_scores[:curr_epoch] = checkpoint['fake_scores'][:curr_epoch]
 
     print('\nChekcpoint Loaded Successfully!\n')
     
@@ -42,7 +46,7 @@ def save_model(
     """
     Function to save the trained model till current epoch, or whenver called
     """
-    torch.save(
+    save(
         {
             "epoch": epoch + 1,
             "generator_state_dict": generator.state_dict(),

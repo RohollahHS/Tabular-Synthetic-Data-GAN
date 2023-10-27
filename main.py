@@ -10,7 +10,7 @@ import numpy as np
 def parse_option():
     parser = argparse.ArgumentParser('Tabular Synthetic Data', add_help=False)
     parser.add_argument("--device", type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument("--n_epochs", type=int, default=20, help="number of epochs of training")
+    parser.add_argument("--n_epochs", type=int, default=2, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--n_cpu", type=int, default=0, help="number of cpu threads to use during batch generation")
@@ -23,12 +23,15 @@ def parse_option():
                         help="model archeticture in Geneartor and Discriminator", 
                         default='transformer', choices=['mlp','transformer'])
     parser.add_argument('--one_hot_smoothing', type=bool, default=False, choices=[True, False])
+    parser.add_argument('--n_heads', type=int, default=4, help='Number of heads for Transformer')
+    parser.add_argument('--n_encoder_layers', type=int, default=2, help='Number of Encoder layers for Transformer')
+    parser.add_argument('--drop_prob', type=float, default=0.2, help='Dropout probability')
     parser.add_argument('--uniform_gama', type=float, default=0.2)
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
     parser.add_argument('--output_path', default='data', type=str, metavar='PATH')
     parser.add_argument('--all_data', type=str, default=False, choices=[True, False])
-    parser.add_argument('--resume', help='resume from checkpoint', default=True, choices=[True, False])
+    parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
     parser.add_argument("--model_name", type=str, default="Debugging")
     
     args = parser.parse_args()

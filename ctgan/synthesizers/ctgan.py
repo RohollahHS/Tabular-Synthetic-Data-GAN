@@ -141,13 +141,11 @@ class CTGAN(BaseSynthesizer):
              d_losses, 
              g_losses, 
              real_scores, 
-             fake_scores) = load_checkpoint(self.args.output_path, 
-                                            self.args.model_name, 
+             fake_scores) = load_checkpoint(self.args, 
                                             self.G,
                                             D,
                                             g_optimizer,
-                                            d_optimizer,
-                                            self._device)
+                                            d_optimizer)
         
         elif self.args.resume == False:
             init_weights(self.G)
@@ -178,12 +176,16 @@ class CTGAN(BaseSynthesizer):
         D.to(self.args.device)
         criterion.to(self.args.device)
 
+        self.G.train()
+        D.train()
+
         device = self.args.device
         num_epochs = self.args.n_epochs
+        
         if self.args.model_type == 'transformer':
-            latent_size = data_dim
+            self.args.latent_size = data_dim
         elif self.args.mdeol_type == 'mlp':
-            latent_size = self.args.latent_size
+            self.args.latent_size = self.args.latent_size
 
         def reset_grad():
             d_optimizer.zero_grad()
@@ -212,7 +214,7 @@ class CTGAN(BaseSynthesizer):
                 
                 # Compute BCELoss using fake samples
                 # First term of the loss is always zero since fake_labels == 0
-                z = torch.randn(samples.shape[0], latent_size).to(device)
+                z = torch.randn(samples.shape[0], self.args.latent_size).to(device)
                 z = Variable(z)
                 fake_samples = self._apply_activate(self.G(z))
                 outputs = D(fake_samples)
@@ -230,7 +232,7 @@ class CTGAN(BaseSynthesizer):
                 # ================================================================== #
 
                 # Compute loss with fake samples
-                z = torch.randn(samples.shape[0], latent_size).to(device)
+                z = torch.randn(samples.shape[0], self.args.latent_size).to(device)
                 z = Variable(z)
                 fake_samples = self._apply_activate(self.G(z))
                 outputs = D(fake_samples)
@@ -275,14 +277,18 @@ class CTGAN(BaseSynthesizer):
             
     @random_state
     def sample(self, n):
+        self.G.eval()
+
         steps = n // self.args.batch_size + 1
         data = []
         for _ in range(steps):
 
             z = Variable(torch.randn(self.args.batch_size, self.args.latent_size).to(self.args.device))
 
-            fake = self.G(z)
-            fakeact = self._apply_activate(fake)
+            with torch.no_grad():
+                fake = self.G(z)
+                fakeact = self._apply_activate(fake)
+            
             data.append(fakeact.detach().cpu().numpy())
 
         data = np.concatenate(data, axis=0)
