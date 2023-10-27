@@ -10,7 +10,7 @@ import numpy as np
 def parse_option():
     parser = argparse.ArgumentParser('Tabular Synthetic Data', add_help=False)
     parser.add_argument("--device", type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+    parser.add_argument("--n_epochs", type=int, default=20, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--n_cpu", type=int, default=0, help="number of cpu threads to use during batch generation")
@@ -28,8 +28,8 @@ def parse_option():
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
     parser.add_argument('--output_path', default='data', type=str, metavar='PATH')
-    parser.add_argument('--all_data', type=str, default='no', choices=['yes, no'])
-    parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
+    parser.add_argument('--all_data', type=str, default=False, choices=[True, False])
+    parser.add_argument('--resume', help='resume from checkpoint', default=True, choices=[True, False])
     parser.add_argument("--model_name", type=str, default="Debugging")
     
     args = parser.parse_args()
@@ -50,7 +50,8 @@ if __name__ == '__main__':
     # transforming features
     data = preprocessing(args.file_name, args.data_path)
 
-    if args.all_data == 'no':
+    if args.all_data == False:
+        np.random.seed(10)
         idx = np.random.randint(0, data.shape[0], 400)
         data = data.iloc[idx]
 

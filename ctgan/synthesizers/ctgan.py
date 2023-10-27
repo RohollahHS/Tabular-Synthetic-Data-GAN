@@ -9,8 +9,13 @@ from torch.autograd import Variable
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from utils.save_records import save_plots
-from utils.save_load_model import save_model
+from utils.save_load_model import save_model, load_checkpoint
 from ctgan.synthesizers.modules import Generator, Discriminator
+
+def init_weights(m):
+    for k in m.modules():
+        if isinstance(k, torch.nn.Linear):
+            torch.nn.init.xavier_normal_(k.weight)
 
 
 class CTGAN(BaseSynthesizer):
@@ -118,52 +123,34 @@ class CTGAN(BaseSynthesizer):
 
         self.args.input_size = data_dim
 
-        
-        # generator_file_name = 'generator_loss_records'
-        # discriminator_file_name = 'discriminator_loss_records'
-
-        # if self.args.resume:
-        #     (
-        #     G,
-        #     D,
-        #     g_optimizer, 
-        #     d_optimizer,
-        #     curr_epoch,
-        #     generator_loss_list,
-        #     discriminator_loss_list,
-        #     ) = load_checkpoint(self.args.output_path, 
-        #                         self.args.model_name, 
-        #                         G,
-        #                         D,
-        #                         g_optimizer,
-        #                         d_optimizer,
-        #                         self._device)
-        
-        # elif self.args.resume == False:
-        #     generator_loss_list = []
-        #     discriminator_loss_list = []
-        #     curr_epoch = 0
-        #     save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
-        #     save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
-
-        criterion = torch.nn.BCELoss()
-
         # Initialize generator and discriminator
-        self.G = Generator(self.args)
-        D = Discriminator(self.args)
+        self.G = Generator(self.args).to(self.args.device)
+        D = Discriminator(self.args).to(self.args.device)
+        criterion = torch.nn.BCELoss().to(self.args.device)
 
-        self.G.to(self.args.device)
-        D.to(self.args.device)
-        criterion.to(self.args.device)
+        # Optimizers
+        g_optimizer = torch.optim.Adam(self.G.parameters(), lr=self.args.lr)
+        d_optimizer = torch.optim.Adam(D.parameters(), lr=self.args.lr)
+
+        if self.args.resume:
+            self.G, D, g_optimizer, d_optimizer, curr_epoch = load_checkpoint(
+                self.args.output_path, 
+                self.args.model_name, 
+                self.G,
+                D,
+                g_optimizer,
+                d_optimizer,
+                self._device)
+        
+        elif self.args.resume == False:
+            init_weights(self.G)
+            init_weights(D)
+            curr_epoch = 0
 
         # Data loader
         data_loader = torch.utils.data.DataLoader(dataset=train_data,
                                                 batch_size=self.args.batch_size, 
                                                 shuffle=True)
-
-        # Optimizers
-        g_optimizer = torch.optim.Adam(self.G.parameters(), lr=self.args.lr)
-        d_optimizer = torch.optim.Adam(D.parameters(), lr=self.args.lr)
 
         n = 0
         for p in self.G.parameters():
@@ -176,8 +163,11 @@ class CTGAN(BaseSynthesizer):
         print('Number of parameters for Discriminator:', n)
         print()
 
+        self.G.to(self.args.device)
+        D.to(self.args.device)
+        criterion.to(self.args.device)
+
         device = self.args.device
-        batch_size = self.args.batch_size
         num_epochs = self.args.n_epochs
         latent_size = self.args.latent_size
 
@@ -191,7 +181,7 @@ class CTGAN(BaseSynthesizer):
             g_optimizer.zero_grad()
 
         total_step = len(data_loader)
-        for epoch in range(num_epochs):
+        for epoch in range(curr_epoch, num_epochs):
             for i, (samples) in enumerate(data_loader):
                 samples = Variable(samples.to(device))
 
@@ -254,13 +244,13 @@ class CTGAN(BaseSynthesizer):
                 fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
                 
                 if (i+1) % self.args.display_intervals == 0:
-                    print('Epoch [{}/{}], Step [{}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
-                        .format(epoch, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
+                    print('Epoch [{:3d}/{}], Step [{:4d}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+                        .format(epoch+1, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
                                 real_score.mean().item(), fake_score.mean().item()))
 
             # Save and plot Statistics
             save_plots(d_losses, g_losses, fake_scores, real_scores, 
-                       num_epochs, self.args.output_path, self.args.model_name)
+                    epoch, self.args.output_path, self.args.model_name)
 
             # generator_loss_list.append(g_losses.tolist())
             # discriminator_loss_list.append(d_losses.tolist())

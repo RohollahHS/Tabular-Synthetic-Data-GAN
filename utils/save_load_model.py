@@ -3,33 +3,23 @@ import torch
 
 def load_checkpoint(checkpoint_address,
                     model_name,
-                    generator,
-                    discriminator,
-                    optimizer_g,
-                    optimizer_d,
+                    G,
+                    D,
+                    g_optimizer,
+                    d_optimizer,
                     device):
     
     checkpoint = torch.load(f'{checkpoint_address}/last_{model_name}.pth', device)
 
-    generator.load_state_dict(checkpoint['generator_state_dict'])
-    discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
-    optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
-    optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
-
+    G.load_state_dict(checkpoint['generator_state_dict'])
+    D.load_state_dict(checkpoint['discriminator_state_dict'])
+    g_optimizer.load_state_dict(checkpoint['optimizer_g_state_dict'])
+    d_optimizer.load_state_dict(checkpoint['optimizer_d_state_dict'])
     curr_epoch = checkpoint['epoch']
-    generator_loss = checkpoint['generator_loss']
-    discriminator_loss = checkpoint['discriminator_loss']
 
-    print('\nChekcpoint loaded!\n')
+    print('\nChekcpoint Loaded Successfully!\n')
     
-    return (
-        generator,
-        discriminator,
-        optimizer_g, optimizer_d,
-        curr_epoch,
-        generator_loss,
-        discriminator_loss
-    )
+    return G, D, g_optimizer, d_optimizer, curr_epoch
 
 
 def save_model(
