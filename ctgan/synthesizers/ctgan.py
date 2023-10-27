@@ -14,7 +14,7 @@ from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from ctgan.synthesizers.modules import Generator, Discriminator
-from utils.save_records import save_loss_records
+from utils.save_records import save_plots
 from utils.save_load_model import load_checkpoint, save_model
 
 
@@ -189,36 +189,38 @@ class CTGAN(BaseSynthesizer):
         if not os.path.exists(self.args.output_path):
             os.mkdir(f'{self.args.output_path}')
         
-        generator_file_name = 'generator_loss_records'
-        discriminator_file_name = 'discriminator_loss_records'
-
         if self.args.resume:
-            (
-            self._generator,
-            discriminator,
-            optimizerG, 
-            optimizerD,
-            curr_epoch,
-            generator_loss_list,
-            discriminator_loss_list,
-            ) = load_checkpoint(self.args.output_path, 
-                                self.args.model_name, 
-                                self._generator,
-                                discriminator,
-                                optimizerG,
-                                optimizerD,
-                                self._device)
+            (self.args, 
+             discriminator, 
+             optimizerG, 
+             optimizerD, 
+             curr_epoch, 
+             d_losses, 
+             g_losses, 
+             real_scores, 
+             fake_scores) = load_checkpoint(self.args, 
+                                            self._generator,
+                                            discriminator,
+                                            optimizerG,
+                                            optimizerD)
         
         elif self.args.resume == False:
-            generator_loss_list = []
-            discriminator_loss_list = []
             curr_epoch = 0
-            save_loss_records(self.args.output_path, generator_file_name, model_name=self.args.model_name)
-            save_loss_records(self.args.output_path, discriminator_file_name, model_name=self.args.model_name)
+            d_losses = np.zeros(epochs)
+            g_losses = np.zeros(epochs)
+            real_scores = np.zeros(epochs)
+            fake_scores = np.zeros(epochs)
+
+        d_losses = np.zeros(epochs)
+        g_losses = np.zeros(epochs)
+        real_scores = np.zeros(epochs)
+        fake_scores = np.zeros(epochs)
+
+        # condvec = None
 
         steps_per_epoch = max(len(train_data) // self._batch_size, 1)
-        for i in range(curr_epoch, epochs):
-            for id_ in trange(steps_per_epoch):
+        for epoch in range(curr_epoch, epochs):
+            for i in range(steps_per_epoch):
                 for n in range(self._discriminator_steps):
                     fakez = torch.normal(mean=mean, std=std)
 
@@ -251,7 +253,9 @@ class CTGAN(BaseSynthesizer):
                         fake_cat = fakeact
 
                     y_fake = discriminator(fake_cat)
+                    fake_score = torch.sigmoid(y_fake)
                     y_real = discriminator(real_cat)
+                    real_score = torch.sigmoid(y_real)
 
                     pen = discriminator.calc_gradient_penalty(
                         real_cat, fake_cat, self._device, self.pac)
@@ -278,8 +282,10 @@ class CTGAN(BaseSynthesizer):
 
                 if c1 is not None:
                     y_fake = discriminator(torch.cat([fakeact, c1], dim=1))
+                    fake_score = torch.sigmoid(y_fake)
                 else:
                     y_fake = discriminator(fakeact)
+                    fake_score = torch.sigmoid(y_fake)
 
                 if condvec is None:
                     cross_entropy = 0
@@ -291,28 +297,23 @@ class CTGAN(BaseSynthesizer):
                 optimizerG.zero_grad(set_to_none=False)
                 loss_g.backward()
                 optimizerG.step()
-            
+
+                d_losses[epoch] = d_losses[epoch]*(i/(i+1.)) + loss_d.item()*(1./(i+1.))
+                g_losses[epoch] = g_losses[epoch]*(i/(i+1.)) + loss_g.item()*(1./(i+1.))
+                real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
+                fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
+                
+                if (i+1) % self.args.display_intervals == 0:
+                    print('Epoch [{:3d}/{}], Step [{:4d}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+                        .format(epoch+1, epochs, i+1, steps_per_epoch, loss_d.item(), loss_g.item(), 
+                                real_score.mean().item(), fake_score.mean().item()))
+
             generator_loss = loss_g.detach().cpu()
             discriminator_loss = loss_d.detach().cpu()
             
-            save_loss_records(self.args.output_path, generator_file_name, loss=generator_loss, epoch=i+1)
-            save_loss_records(self.args.output_path, discriminator_file_name, loss=discriminator_loss, epoch=i+1)
+            save_plots(d_losses, g_losses, fake_scores, real_scores, 
+                    epoch, self.args.output_path, self.args.model_name)
 
-            print(f'Epoch: {i+1}/{epochs} | G Loss: {generator_loss:.3f} | D Loss: {discriminator_loss:.3f}')
-
-            generator_loss_list.append(generator_loss)
-            discriminator_loss_list.append(discriminator_loss)
-
-            save_model(self._generator,
-                       discriminator,
-                       optimizerG,
-                       optimizerD,
-                       i,
-                       generator_loss_list,
-                       discriminator_loss_list,
-                       self.args.output_path,
-                       self.args.model_name)
-            
             epoch_loss_df = pd.DataFrame({
                 'Epoch': [i],
                 'Generator Loss': [generator_loss],
