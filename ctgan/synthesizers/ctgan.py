@@ -111,7 +111,7 @@ class CTGAN(BaseSynthesizer):
 
         num_epochs = self.args.n_epochs
 
-        self._transformer = DataTransformer()
+        self._transformer = DataTransformer(args=self.args)
         self._transformer.fit(train_data, discrete_columns)
 
         train_data = self._transformer.transform(train_data)
@@ -126,8 +126,8 @@ class CTGAN(BaseSynthesizer):
 
         # if self.args.resume:
         #     (
-        #     self._generator,
-        #     discriminator,
+        #     G,
+        #     D,
         #     g_optimizer, 
         #     d_optimizer,
         #     curr_epoch,
@@ -135,8 +135,8 @@ class CTGAN(BaseSynthesizer):
         #     discriminator_loss_list,
         #     ) = load_checkpoint(self.args.output_path, 
         #                         self.args.model_name, 
-        #                         self._generator,
-        #                         discriminator,
+        #                         G,
+        #                         D,
         #                         g_optimizer,
         #                         d_optimizer,
         #                         self._device)
@@ -151,10 +151,10 @@ class CTGAN(BaseSynthesizer):
         criterion = torch.nn.BCELoss()
 
         # Initialize generator and discriminator
-        G = Generator(self.args)
+        self.G = Generator(self.args)
         D = Discriminator(self.args)
 
-        G.to(self.args.device)
+        self.G.to(self.args.device)
         D.to(self.args.device)
         criterion.to(self.args.device)
 
@@ -164,11 +164,11 @@ class CTGAN(BaseSynthesizer):
                                                 shuffle=True)
 
         # Optimizers
-        g_optimizer = torch.optim.Adam(G.parameters(), lr=self.args.lr)
+        g_optimizer = torch.optim.Adam(self.G.parameters(), lr=self.args.lr)
         d_optimizer = torch.optim.Adam(D.parameters(), lr=self.args.lr)
 
         n = 0
-        for p in G.parameters():
+        for p in self.G.parameters():
             n += p.numel()
         print('Number of parameters for Generator:', n)
         
@@ -217,7 +217,7 @@ class CTGAN(BaseSynthesizer):
                 # First term of the loss is always zero since fake_labels == 0
                 z = torch.randn(samples.shape[0], latent_size).to(device)
                 z = Variable(z)
-                fake_samples = self._apply_activate(G(z))
+                fake_samples = self._apply_activate(self.G(z))
                 outputs = D(fake_samples)
                 d_loss_fake = criterion(outputs, fake_labels)
                 fake_score = outputs
@@ -235,7 +235,7 @@ class CTGAN(BaseSynthesizer):
                 # Compute loss with fake samples
                 z = torch.randn(samples.shape[0], latent_size).to(device)
                 z = Variable(z)
-                fake_samples = self._apply_activate(G(z))
+                fake_samples = self._apply_activate(self.G(z))
                 outputs = D(fake_samples)
                 
                 # We train G to maximize log(D(G(z)) instead of minimizing log(1-D(G(z)))
@@ -267,28 +267,30 @@ class CTGAN(BaseSynthesizer):
             # generator_loss_list.append(g_losses.tolist())
             # discriminator_loss_list.append(d_losses.tolist())
 
-            # save_model(self._generator,
-            #            discriminator,
-            #            g_optimizer,
-            #            d_optimizer,
-            #            epoch,
-            #            generator_loss_list,
-            #            discriminator_loss_list,
-            #            self.args.output_path,
-            #            self.args.model_name)
+            save_model(self.G,
+                       D,
+                       g_optimizer,
+                       d_optimizer,
+                       epoch,
+                       g_losses.tolist(),
+                       d_losses.tolist(),
+                       self.args.output_path,
+                       self.args.model_name)
             
     @random_state
     def sample(self, n):
-        steps = n // self._batch_size + 1
+        steps = n // self.args.batch_size + 1
         data = []
         for _ in range(steps):
 
-            z = Variable(torch.randn(self._batch_size, self._embedding_dim).to(self._device))
+            z = Variable(torch.randn(self.args.batch_size, self.args.latent_size).to(self.args.device))
 
-            fake = self._generator(z)
+            fake = self.G(z)
             fakeact = self._apply_activate(fake)
             data.append(fakeact.detach().cpu().numpy())
 
         data = np.concatenate(data, axis=0)
+
+        data = data[:n]
 
         return self._transformer.inverse_transform(data)

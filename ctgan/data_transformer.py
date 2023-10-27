@@ -22,7 +22,7 @@ class DataTransformer(object):
     and a vector. Discrete columns are encoded using a OneHotEncoder.
     """
 
-    def __init__(self, max_clusters=5, weight_threshold=0.005):
+    def __init__(self, max_clusters=5, weight_threshold=0.005, args=None):
         """Create a data transformer.
 
         Args:
@@ -33,6 +33,7 @@ class DataTransformer(object):
         """
         self._max_clusters = max_clusters
         self._weight_threshold = weight_threshold
+        self.args = args
 
     def _fit_continuous(self, data):
         """Train Bayesian GMM for continuous columns.
@@ -126,11 +127,25 @@ class DataTransformer(object):
         index = transformed[f'{column_name}.component'].to_numpy().astype(int)
         output[np.arange(index.size), index + 1] = 1.0
 
+        if self.args.one_hot_smoothing:
+            output[:, 1:] = self._one_hot_smoothing(output[:, 1:])
+
         return output
 
     def _transform_discrete(self, column_transform_info, data):
         ohe = column_transform_info.transform
-        return ohe.transform(data).to_numpy()
+        one_hots = ohe.transform(data).to_numpy()
+
+        if self.args.one_hot_smoothing:
+            return self._one_hot_smoothing(one_hots)
+
+        return one_hots
+
+    def _one_hot_smoothing(self, one_hots):
+        one_hots_noised = one_hots + np.random.uniform(0, self.args.uniform_gama, (one_hots.shape))
+        sum_over_rows = np.sum(one_hots_noised, axis=1).reshape(one_hots_noised.shape[0], -1).astype(np.float32)
+        smoothed_one_hots = one_hots_noised.astype(np.float32) / sum_over_rows
+        return smoothed_one_hots
 
     def _synchronous_transform(self, raw_data, column_transform_info_list):
         """Take a Pandas DataFrame and transform columns synchronous.
@@ -168,12 +183,6 @@ class DataTransformer(object):
 
     def transform(self, raw_data):
         """Take raw data and output a matrix data."""
-        if not isinstance(raw_data, pd.DataFrame):
-            column_names = [str(num) for num in range(raw_data.shape[1])]
-            raw_data = pd.DataFrame(raw_data, columns=column_names)
-
-        # Only use parallelization with larger data sizes.
-        # Otherwise, the transformation will be slower.
         if raw_data.shape[0] < 500:
             column_data_list = self._synchronous_transform(
                 raw_data,
