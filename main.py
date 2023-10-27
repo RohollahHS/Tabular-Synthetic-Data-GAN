@@ -10,7 +10,7 @@ import numpy as np
 def parse_option():
     parser = argparse.ArgumentParser('Tabular Synthetic Data', add_help=False)
     parser.add_argument("--device", type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument("--n_epochs", type=int, default=2, help="number of epochs of training")
+    parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--n_cpu", type=int, default=0, help="number of cpu threads to use during batch generation")
@@ -23,7 +23,7 @@ def parse_option():
                         help="model archeticture in Geneartor and Discriminator", 
                         default='mlp', choices=['mlp','transformer'])
 
-    parser.add_argument('--one_hot_smoothing', type=bool, default=False, choices=[True, False])
+    parser.add_argument('--one_hot_smoothing', type=bool, default=True, choices=[True, False])
     parser.add_argument('--uniform_gama', type=float, default=0.2)
     parser.add_argument('--file_name', type=str, help='dataset name', default='tickets')
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
@@ -55,10 +55,10 @@ if __name__ == '__main__':
         data = data.iloc[idx]
 
     # Names of the columns that are discrete
-    discrete_columns = ['task_type','customer_satisfaction',
+    discrete_columns = ['task_type','customer_satisfaction', 'creation_date_year',
                         'customer_problem_resolved','user_actioned','user_team']
 
-    ctgan = CTGAN(epochs=args.n_epochs, batch_size=args.batch_size, 
+    ctgan = CTGAN(epochs=args.n_epochs, batch_size=args.batch_size,
                   model_type=args.model_type, args=args)
     ctgan.fit(data, discrete_columns)
 

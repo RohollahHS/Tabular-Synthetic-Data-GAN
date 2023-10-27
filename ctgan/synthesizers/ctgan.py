@@ -1,22 +1,15 @@
 """CTGAN module."""
 
-import os
-import torchvision.transforms as transforms
-
-from torchvision import datasets
-from torch import nn
 import numpy as np
 import pandas as pd
 import torch
-from torch import optim
 from torch.nn import functional
 from torch.autograd import Variable
 
-from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
-from utils.save_records import save_loss_records, save_plots
-from utils.save_load_model import load_checkpoint, save_model
+from utils.save_records import save_plots
+from utils.save_load_model import save_model
 from ctgan.synthesizers.modules import Generator, Discriminator
 
 
@@ -37,7 +30,12 @@ class CTGAN(BaseSynthesizer):
         self._generator = None
 
     @staticmethod
-    def _gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
+    def _gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1, args=None):
+        if args.one_hot_smoothing:
+            if logits.shape[1] == 1:
+                return functional.sigmoid(logits)
+            return functional.softmax(logits, dim=-1)
+
         for _ in range(10):
             transformed = functional.gumbel_softmax(logits, tau=tau, hard=hard, eps=eps, dim=dim)
             if not torch.isnan(transformed).any():
@@ -57,7 +55,7 @@ class CTGAN(BaseSynthesizer):
                     st = ed
                 elif span_info.activation_fn == 'softmax':
                     ed = st + span_info.dim
-                    transformed = self._gumbel_softmax(data[:, st:ed], tau=0.2)
+                    transformed = self._gumbel_softmax(data[:, st:ed], tau=0.2, args=self.args)
                     data_t.append(transformed)
                     st = ed
                 else:
