@@ -3,6 +3,7 @@ from ctgan import CTGAN
 from utils.data_processing import preprocessing, post_processing
 from data_transformer_evaluation import start_evaluation
 import numpy as np
+from ctgan import load_demo
 
 
 def parse_option():
@@ -37,33 +38,75 @@ def parse_option():
 
 
 if __name__ == '__main__':
-    args = parse_option()
-
-    # transforming features
-    data = preprocessing(args.file_name, args.data_path)
-
-    if args.all_data == False:
-        np.random.seed(10)
-        idx = np.random.randint(0, data.shape[0], 400)
-        data = data.iloc[:200]
+    real_data = load_demo()
+    np.random.seed(10)
+    idx = np.random.randint(0, real_data.shape[0], 400)
+    real_data = real_data.iloc[:400]
 
     # Names of the columns that are discrete
     discrete_columns = [
-        'task_type',
-        'customer_satisfaction',
-        'customer_problem_resolved',
-        'user_actioned',
-        'user_team',
+        'workclass',
+        'education',
+        'marital-status',
+        'occupation',
+        'relationship',
+        'race',
+        'sex',
+        'native-country',
+        'income'
     ]
+    ctgan = CTGAN(epochs=100)
+    ctgan.fit(real_data, discrete_columns)
 
-    ctgan = CTGAN(epochs=args.n_epochs, batch_size=args.batch_size, 
-                  model_type=args.model_type, args=args)
-    ctgan.fit(data, discrete_columns)
+
+    # args = parse_option()
+
+    # # transforming features
+    # data = preprocessing(args.file_name, args.data_path)
+    # if args.all_data == False:
+    #     np.random.seed(10)
+    #     idx = np.random.randint(0, data.shape[0], 400)
+    #     data = data.iloc[idx]
+    #     # data = data.drop(columns=['delta_creation_date'], axis=1)
+
+    # discrete_columns = [
+    #     'task_type',
+    #     'customer_satisfaction',
+    #     'customer_problem_resolved',
+    #     'user_actioned',
+    #     'user_team',
+    # ]
+    # ctgan = CTGAN(epochs=100)
+    # ctgan.fit(data, discrete_columns)
 
     # Create synthetic data
-    synthetic_data = ctgan.sample(1000)
+    # synthetic_data = ctgan.sample(1000)
 
-    # save raw synthetic data and post processed synthetic data
-    post_processing(synthetic_data, args.file_name, args.data_path)
+    # transforming features
+    # data = preprocessing(args.file_name, args.data_path)
 
-    start_evaluation(args.file_name, args.data_path, args.model_name, True)    
+    # if args.all_data == False:
+    #     np.random.seed(10)
+    #     idx = np.random.randint(0, data.shape[0], 400)
+    #     data = data.iloc[:200]
+
+    # # Names of the columns that are discrete
+    # discrete_columns = [
+    #     'task_type',
+    #     'customer_satisfaction',
+    #     'customer_problem_resolved',
+    #     'user_actioned',
+    #     'user_team',
+    # ]
+
+    # ctgan = CTGAN(epochs=args.n_epochs, batch_size=args.batch_size, 
+    #               model_type=args.model_type, args=args)
+    # ctgan.fit(data, discrete_columns)
+
+    # # Create synthetic data
+    # synthetic_data = ctgan.sample(1000)
+
+    # # save raw synthetic data and post processed synthetic data
+    # post_processing(synthetic_data, args.file_name, args.data_path)
+
+    # start_evaluation(args.file_name, args.data_path, args.model_name, True)    
