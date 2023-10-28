@@ -12,6 +12,7 @@ from tqdm import tqdm
 from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
+from utils.save_records import save_plots
 
 
 class Discriminator(Module):
@@ -143,9 +144,10 @@ class CTGAN(BaseSynthesizer):
     def __init__(self, embedding_dim=128, generator_dim=(256, 256), discriminator_dim=(256, 256),
                  generator_lr=2e-4, generator_decay=1e-6, discriminator_lr=2e-4,
                  discriminator_decay=1e-6, batch_size=500, discriminator_steps=1,
-                 log_frequency=True, verbose=False, epochs=300, pac=10, cuda=True):
+                 log_frequency=True, verbose=False, epochs=300, pac=10, cuda=True, args=None):
 
         assert batch_size % 2 == 0
+        self.args = args
 
         self._embedding_dim = embedding_dim
         self._generator_dim = generator_dim
@@ -440,6 +442,10 @@ class CTGAN(BaseSynthesizer):
                     print('Epoch [{:3d}/{}], Step [{:4d}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
                         .format(i+1, epochs, id_+1, steps_per_epoch, loss_d.item(), loss_g.item(), 
                                 real_score.mean().item(), fake_score.mean().item()))
+
+            # save_plots(d_losses, g_losses, fake_scores, real_scores, 
+            #         i, self.args.output_path, self.args.model_name)
+
 
             generator_loss = loss_g.detach().cpu()
             discriminator_loss = loss_d.detach().cpu()

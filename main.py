@@ -1,3 +1,4 @@
+import pandas as pd
 import argparse
 from ctgan import CTGAN
 from utils.data_processing import preprocessing, post_processing
@@ -38,49 +39,50 @@ def parse_option():
 
 
 if __name__ == '__main__':
-    real_data = load_demo()
-    np.random.seed(10)
-    idx = np.random.randint(0, real_data.shape[0], 400)
-    real_data = real_data.iloc[:400]
+    # DEMO_URL = 'http://ctgan-demo.s3.amazonaws.com/census.csv.gz'
+    # real_data = pd.read_csv(DEMO_URL, compression='gzip')
+    # np.random.seed(10)
+    # idx = np.random.randint(0, real_data.shape[0], 400)
+    # real_data = real_data.iloc[idx]
 
-    # Names of the columns that are discrete
-    discrete_columns = [
-        'workclass',
-        'education',
-        'marital-status',
-        'occupation',
-        'relationship',
-        'race',
-        'sex',
-        'native-country',
-        'income'
-    ]
-    ctgan = CTGAN(epochs=100)
-    ctgan.fit(real_data, discrete_columns)
-
-
-    # args = parse_option()
-
-    # # transforming features
-    # data = preprocessing(args.file_name, args.data_path)
-    # if args.all_data == False:
-    #     np.random.seed(10)
-    #     idx = np.random.randint(0, data.shape[0], 400)
-    #     data = data.iloc[idx]
-    #     # data = data.drop(columns=['delta_creation_date'], axis=1)
-
+    # # Names of the columns that are discrete
     # discrete_columns = [
-    #     'task_type',
-    #     'customer_satisfaction',
-    #     'customer_problem_resolved',
-    #     'user_actioned',
-    #     'user_team',
+    #     'workclass',
+    #     'education',
+    #     'marital-status',
+    #     'occupation',
+    #     'relationship',
+    #     'race',
+    #     'sex',
+    #     'native-country',
+    #     'income'
     # ]
     # ctgan = CTGAN(epochs=100)
-    # ctgan.fit(data, discrete_columns)
+    # ctgan.fit(real_data, discrete_columns)
+
+
+    args = parse_option()
+
+    # transforming features
+    data = preprocessing(args.file_name, args.data_path)
+    if args.all_data == False:
+        np.random.seed(10)
+        idx = np.random.randint(0, data.shape[0], 400)
+        data = data.iloc[sorted(idx)]
+        # data = data.drop(columns=['delta_creation_date'], axis=1)
+
+    discrete_columns = [
+        'task_type',
+        'customer_satisfaction',
+        'customer_problem_resolved',
+        'user_actioned',
+        'user_team',]
+    
+    ctgan = CTGAN(epochs=100, args=args)
+    ctgan.fit(data, discrete_columns)
 
     # Create synthetic data
-    # synthetic_data = ctgan.sample(1000)
+    synthetic_data = ctgan.sample(1000)
 
     # transforming features
     # data = preprocessing(args.file_name, args.data_path)
