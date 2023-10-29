@@ -281,7 +281,7 @@ def start_evaluation(file_name, dir_path, model_name, drop_column=False):
         synthetic_evaluation(
             original_data,
             synthetic_data,
-            drop_columns=drop_columns,
+            drop_columns=[],
             label_column="customer_problem_resolved",
             test_size=0.3,
             max_depth_tree=3,

@@ -16,7 +16,7 @@ def parse_option():
                         default='mlp', choices=['mlp','transformer'])
     
     parser.add_argument('--batch_size', type=int, default=200)
-    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--generator_dim', default=(256, 256))
     parser.add_argument('--discriminator_dim', default=(256, 256))
@@ -27,7 +27,7 @@ def parse_option():
 
     parser.add_argument('--all_data', type=str, default=False, choices=[True, False])
 
-    parser.add_argument('--resume', help='resume from checkpoint', default=True, choices=[True, False])
+    parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
     parser.add_argument('--display_intervals', default=1)
 
     parser.add_argument("--conditional", type=bool, default=False, choices=[True, False])
@@ -79,9 +79,9 @@ if __name__ == '__main__':
     ctgan.fit(data, discrete_columns)
 
     # Create synthetic data
-    synthetic_data = ctgan.sample(1000)
+    synthetic_data = ctgan.sample(data.shape[0])
 
     # save raw synthetic data and post processed synthetic data
     post_processing(synthetic_data, args.file_name, args.data_path)
 
-    start_evaluation(args.file_name, args.data_path, args.model_name)    
+    start_evaluation(args.file_name, args.data_path, args.model_name, drop_column=True)

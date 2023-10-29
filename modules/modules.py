@@ -6,10 +6,10 @@ from ctgan.synthesizers.transformer import Encoder
 class Discriminator(Module):
     """Discriminator for the CTGAN."""
 
-    def __init__(self, args=None, pac=10, model_type='mlp', 
-                 enc_dim=128, n_head=4, n_layers=2, drop_prob=0.5):
+    def __init__(self, args=None, pac=10):
         super(Discriminator, self).__init__()
         input_dim = args.data_dim + args.condvec_dim
+
         dim = input_dim * pac
         self.pac = pac
         self.pacdim = dim
@@ -78,7 +78,7 @@ class Generator(Module):
 
     def __init__(self, args=None):
         super(Generator, self).__init__()
-        dim = args.embedding_dim
+        dim = args.embedding_dim + args.condvec_dim
 
         if args.generator_model_type == 'mlp':
             seq = []
