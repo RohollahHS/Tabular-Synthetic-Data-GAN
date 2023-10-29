@@ -143,7 +143,9 @@ class CTGAN(BaseSynthesizer):
 
         data_dim = self._transformer.output_dimensions
         self.args.data_dim = data_dim
-        self.args.embedding = data_dim
+        if self.args.generator_model_type == 'transformer':
+            self.args.embedding_dim = data_dim
+
 
         if not self.args.conditional:
             self.args.condvec_dim = 0
@@ -175,7 +177,7 @@ class CTGAN(BaseSynthesizer):
         print('Number of Parameters for Discriminator:', n)
 
 
-        mean = torch.zeros(self._batch_size, self.args.embedding, device=self._device)
+        mean = torch.zeros(self._batch_size, self.args.embedding_dim, device=self._device)
         std = mean + 1
 
         self.loss_values = pd.DataFrame(columns=['Epoch', 'Generator Loss', 'Distriminator Loss'])
@@ -188,7 +190,7 @@ class CTGAN(BaseSynthesizer):
         dataloader = torch.utils.data.DataLoader(train_data.astype(np.float32), 
                                                  shuffle=True, 
                                                  batch_size=self.args.batch_size)
-
+        total_steps = len(dataloader)
         criterion = torch.nn.BCELoss().to(self.args.device)
 
         d_losses = np.zeros(epochs)
@@ -197,8 +199,8 @@ class CTGAN(BaseSynthesizer):
         fake_scores = np.zeros(epochs)
 
         steps_per_epoch = max(len(train_data) // self._batch_size, 1)
-        for i in epoch_iterator:
-            for id_, real_samples in enumerate(dataloader):
+        for epoch in epoch_iterator:
+            for i, real_samples in enumerate(dataloader):
                 real_samples = Variable(real_samples.to(self.args.device))
 
                 num_samples = real_samples.shape[0]
@@ -207,7 +209,7 @@ class CTGAN(BaseSynthesizer):
                 fake_labels = torch.zeros(num_samples, 1).to(self.args.device)
                 fake_labels = Variable(fake_labels)
 
-                fakez = torch.randn(num_samples, self.args.embedding).to(self.args.device)
+                fakez = torch.randn(num_samples, self.args.embedding_dim).to(self.args.device)
                 fake = self._generator(fakez)
                 fakeact = self._apply_activate(fake)
                 y_fake = discriminator(fakeact)
@@ -215,7 +217,7 @@ class CTGAN(BaseSynthesizer):
                 # d_loss_fake = criterion(fake_score, fake_labels)
 
                 y_real = discriminator(real_samples)
-                real_score = torch.sigmoid(y_fake)
+                real_score = torch.sigmoid(y_real)
                 # d_loss_fake = criterion(real_score, real_labels)
 
                 pen = discriminator.calc_gradient_penalty(
@@ -227,7 +229,7 @@ class CTGAN(BaseSynthesizer):
                 loss_d.backward()
                 optimizerD.step()
 
-                fakez = torch.randn(num_samples, self.args.embedding).to(self.args.device)
+                fakez = torch.randn(num_samples, self.args.embedding_dim).to(self.args.device)
 
                 fake = self._generator(fakez)
                 fakeact = self._apply_activate(fake)
@@ -242,15 +244,15 @@ class CTGAN(BaseSynthesizer):
                 loss_g.backward()
                 optimizerG.step()
 
-                d_losses[i] = d_losses[id_]*(id_/(id_+1.)) + loss_d.item()*(1./(id_+1.))
-                g_losses[i] = g_losses[id_]*(id_/(id_+1.)) + loss_g.item()*(1./(id_+1.))
-                real_scores[i] = real_scores[id_]*(id_/(id_+1.)) + real_score.mean().item()*(1./(id_+1.))
-                fake_scores[i] = fake_scores[id_]*(id_/(id_+1.)) + fake_score.mean().item()*(1./(id_+1.))
-                
-                if (id_+1) % 1 == 0:
-                    print('Epoch [{:3d}/{}], Step [{:4d}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
-                        .format(i+1, epochs, id_+1, steps_per_epoch, loss_d.item(), loss_g.item(), 
-                                real_score.mean().item(), fake_score.mean().item()))
+            d_losses[epoch] = d_losses[epoch]*(i/(i+1.)) + loss_d.item()*(1./(i+1.))
+            g_losses[epoch] = g_losses[epoch]*(i/(i+1.)) + loss_g.item()*(1./(i+1.))
+            real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
+            fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
+            
+            if (i+1) % self.args.display_intervals == 0:
+                print('Epoch [{}/{}], Step [{}/{}], loss_d: {:.4f}, loss_g: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+                    .format(epoch, epochs, i+1, total_steps, loss_d.item(), loss_g.item(), 
+                            real_score.mean().item(), fake_score.mean().item()))
 
             # save_plots(d_losses, g_losses, fake_scores, real_scores, 
             #         i, self.args.output_path, self.args.model_name)
@@ -289,7 +291,7 @@ class CTGAN(BaseSynthesizer):
         steps = n // self._batch_size + 1
         data = []
         for i in range(steps):
-            mean = torch.zeros(self._batch_size, self.args.embedding)
+            mean = torch.zeros(self._batch_size, self.args.embedding_dim)
             std = mean + 1
             fakez = torch.normal(mean=mean, std=std).to(self._device)
 

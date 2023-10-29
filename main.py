@@ -87,7 +87,7 @@ if __name__ == '__main__':
     # transforming features
     data = preprocessing(args.file_name, args.data_path)
     if args.all_data == False:
-        np.random.seed(11)
+        np.random.seed(10)
         idx = np.random.randint(0, data.shape[0], 400)
         data = data.iloc[sorted(idx)]
         # data = data.drop(columns=['delta_creation_date'], axis=1)
