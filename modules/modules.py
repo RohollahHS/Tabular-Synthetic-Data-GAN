@@ -6,27 +6,28 @@ from ctgan.synthesizers.transformer import Encoder
 class Discriminator(Module):
     """Discriminator for the CTGAN."""
 
-    def __init__(self, input_dim, discriminator_dim, pac=10, model_type='mlp', 
+    def __init__(self, args=None, pac=10, model_type='mlp', 
                  enc_dim=128, n_head=4, n_layers=2, drop_prob=0.5):
         super(Discriminator, self).__init__()
+        input_dim = args.data_dim + args.condvec_dim
         dim = input_dim * pac
         self.pac = pac
         self.pacdim = dim
 
-        if model_type == 'mlp':
+        if args.discriminator_model_type == 'mlp':
             seq = []
-            for item in list(discriminator_dim):
+            for item in list(args.discriminator_dim):
                 seq += [Linear(dim, item), LeakyReLU(0.2), Dropout(0.5)]
                 dim = item
             seq += [Linear(dim, 1)]
             self.dis = Sequential(*seq)
         
-        elif model_type == 'transformer':
-            self.dis = Encoder(d_model=enc_dim,
-                                ffn_hidden=enc_dim*2,
-                                n_head=n_head,
-                                n_layers=n_layers,
-                                drop_prob=drop_prob)
+        elif args.discriminator_model_type == 'transformer':
+            self.dis = Encoder(d_model=self.args.discriminator_d_model,
+                               ffn_hidden=self.args.discriminator_d_model*2,
+                               n_head=self.args.discriminator_n_head,
+                               n_layers=self.args.discriminator_n_layers,
+                               drop_prob=self.args.discriminator_drop_prob)
     
     def calc_gradient_penalty(self, real_data, fake_data, device='cpu', pac=10, lambda_=10):
         """Compute the gradient penalty."""
@@ -75,27 +76,29 @@ class Residual(Module):
 class Generator(Module):
     """Generator for the CTGAN."""
 
-    def __init__(self, embedding_dim, generator_dim, data_dim, model_type='mlp',
-                 enc_dim=128, n_head=4, n_layers=2, drop_prob=0.5):
+    def __init__(self, args=None):
         super(Generator, self).__init__()
-        dim = embedding_dim
+        dim = args.embedding_dim
 
-        if model_type == 'mlp':
+        if args.generator_model_type == 'mlp':
             seq = []
-            for item in list(generator_dim):
+            for item in list(args.generator_dim):
                 seq += [Residual(dim, item)]
                 dim += item
-            seq.append(Linear(dim, data_dim))
+            seq.append(Linear(dim, args.data_dim))
             self.gen = Sequential(*seq)
         
-        elif model_type == 'transformer':
-            self.gen = Encoder(d_model=enc_dim,
-                                ffn_hidden=enc_dim*2,
-                                n_head=n_head,
-                                n_layers=n_layers,
-                                drop_prob=drop_prob)
+        elif args.generator_model_type == 'transformer':
+            # Encoder: (N, data_dim) --> (N, data_dim, generator_d_model)
+            self.enc = Encoder(d_model=args.generator_d_model,
+                               ffn_hidden=args.generator_d_model*2,
+                               n_head=args.generator_n_head,
+                               n_layers=args.generator_n_layers,
+                               drop_prob=args.generator_drop_prob)
+            self.linear_d_model_to_1 = torch.nn.Linear(args.generator_d_model, 1)
+            self.gen = Sequential(self.enc, ReLU(), self.linear_d_model_to_1)
     
-    def forward(self, input_):
+    def forward(self, x):
         """Apply the Generator to the `input_`."""
-        data = self.gen(input_)
-        return data
+        x = self.gen(x).squeeze()
+        return x

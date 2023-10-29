@@ -177,7 +177,7 @@ class Encoder(nn.Module):
                                                   drop_prob=drop_prob)
                                      for _ in range(n_layers)])
 
-        self.linear_d_model_to_1 = nn.Linear(d_model, 1)
+        # self.linear_d_model_to_1 = nn.Linear(d_model, 1)
 
     def forward(self, x, src_mask=None):
         x = self.linear_1_to_d_model(x.unsqueeze(-1))
@@ -185,5 +185,5 @@ class Encoder(nn.Module):
         for layer in self.layers:
             x = layer(x, src_mask)
         
-        x = self.linear_d_model_to_1(x).squeeze(-1)
+        # x = self.linear_d_model_to_1(x).squeeze(-1)
         return x
