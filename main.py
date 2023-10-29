@@ -16,7 +16,7 @@ def parse_option():
                         default='mlp', choices=['mlp','transformer'])
     
     parser.add_argument('--batch_size', type=int, default=200)
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--generator_dim', default=(256, 256))
     parser.add_argument('--discriminator_dim', default=(256, 256))
@@ -27,7 +27,7 @@ def parse_option():
 
     parser.add_argument('--all_data', type=str, default=False, choices=[True, False])
 
-    parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
+    parser.add_argument('--resume', help='resume from checkpoint', default=True, choices=[True, False])
     parser.add_argument('--display_intervals', default=1)
 
     parser.add_argument("--conditional", type=bool, default=False, choices=[True, False])
@@ -47,8 +47,6 @@ def parse_option():
     parser.add_argument('--discriminator_n_layers', default=2)
     parser.add_argument('--discriminator_drop_prob', default=0.2)
 
-
-
     args = parser.parse_args()
     
     print('Args:')
@@ -60,28 +58,6 @@ def parse_option():
 
 
 if __name__ == '__main__':
-    # DEMO_URL = 'http://ctgan-demo.s3.amazonaws.com/census.csv.gz'
-    # real_data = pd.read_csv(DEMO_URL, compression='gzip')
-    # np.random.seed(10)
-    # idx = np.random.randint(0, real_data.shape[0], 400)
-    # real_data = real_data.iloc[idx]
-
-    # # Names of the columns that are discrete
-    # discrete_columns = [
-    #     'workclass',
-    #     'education',
-    #     'marital-status',
-    #     'occupation',
-    #     'relationship',
-    #     'race',
-    #     'sex',
-    #     'native-country',
-    #     'income'
-    # ]
-    # ctgan = CTGAN(epochs=100)
-    # ctgan.fit(real_data, discrete_columns)
-
-
     args = parse_option()
 
     # transforming features
@@ -105,7 +81,7 @@ if __name__ == '__main__':
     # Create synthetic data
     synthetic_data = ctgan.sample(1000)
 
-    # # save raw synthetic data and post processed synthetic data
-    # post_processing(synthetic_data, args.file_name, args.data_path)
+    # save raw synthetic data and post processed synthetic data
+    post_processing(synthetic_data, args.file_name, args.data_path)
 
-    # start_evaluation(args.file_name, args.data_path, args.model_name, True)    
+    start_evaluation(args.file_name, args.data_path, args.model_name)    

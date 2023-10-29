@@ -15,10 +15,10 @@ def load_checkpoint(args,
     d_optimizer.load_state_dict(checkpoint['optimizer_d_state_dict'])
     curr_epoch = checkpoint['epoch']
 
-    d_losses = zeros(args.n_epochs)
-    g_losses = zeros(args.n_epochs)
-    real_scores = zeros(args.n_epochs)
-    fake_scores = zeros(args.n_epochs)
+    d_losses = zeros(args.epochs)
+    g_losses = zeros(args.epochs)
+    real_scores = zeros(args.epochs)
+    fake_scores = zeros(args.epochs)
 
     d_losses[:curr_epoch] = checkpoint['d_losses'][:curr_epoch]
     g_losses[:curr_epoch] = checkpoint['g_losses'][:curr_epoch]

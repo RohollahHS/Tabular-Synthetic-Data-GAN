@@ -1,5 +1,5 @@
 """CTGAN module."""
-
+import os
 import warnings
 
 import numpy as np
@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from torch.autograd import Variable
 from torch import optim
-from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequential, functional
+from torch.nn import functional
 from tqdm import tqdm
 
 from ctgan.data_sampler import DataSampler
@@ -15,6 +15,7 @@ from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from utils.save_records import save_plots
 from modules.modules import Discriminator, Generator
+from utils.save_load_model import load_checkpoint, save_model
 
 
 
@@ -119,17 +120,10 @@ class CTGAN(BaseSynthesizer):
             raise ValueError(f'Invalid columns found: {invalid_columns}')
 
     @random_state
-    def fit(self, train_data, discrete_columns=(), epochs=None):
+    def fit(self, train_data, discrete_columns=()):
         self._validate_discrete_columns(train_data, discrete_columns)
 
-        if epochs is None:
-            epochs = self._epochs
-        else:
-            warnings.warn(
-                ('`epochs` argument in `fit` method has been deprecated and will be removed '
-                 'in a future version. Please pass `epochs` to the constructor instead'),
-                DeprecationWarning
-            )
+        epochs = self._epochs
 
         self._transformer = DataTransformer()
         self._transformer.fit(train_data, discrete_columns)
@@ -145,7 +139,6 @@ class CTGAN(BaseSynthesizer):
         self.args.data_dim = data_dim
         if self.args.generator_model_type == 'transformer':
             self.args.embedding_dim = data_dim
-
 
         if not self.args.conditional:
             self.args.condvec_dim = 0
@@ -176,38 +169,41 @@ class CTGAN(BaseSynthesizer):
             n += p.numel()
         print('Number of Parameters for Discriminator:', n)
 
-
-        mean = torch.zeros(self._batch_size, self.args.embedding_dim, device=self._device)
-        std = mean + 1
-
-        self.loss_values = pd.DataFrame(columns=['Epoch', 'Generator Loss', 'Distriminator Loss'])
-
-        epoch_iterator = tqdm(range(epochs), disable=(not self._verbose))
-        if self._verbose:
-            description = 'Gen. ({gen:.2f}) | Discrim. ({dis:.2f})'
-            epoch_iterator.set_description(description.format(gen=0, dis=0))
+        if not os.path.exists(self.args.output_path):
+            os.mkdir(f'{self.args.output_path}')
+        
+        if self.args.resume:
+            (self._generator, 
+             discriminator, 
+             optimizerG, 
+             optimizerD, 
+             curr_epoch, 
+             d_losses, 
+             g_losses, 
+             real_scores, 
+             fake_scores) = load_checkpoint(self.args, 
+                                            self._generator,
+                                            discriminator,
+                                            optimizerG,
+                                            optimizerD)
+        
+        elif self.args.resume == False:
+            curr_epoch = 0
+            d_losses = np.zeros(epochs)
+            g_losses = np.zeros(epochs)
+            real_scores = np.zeros(epochs)
+            fake_scores = np.zeros(epochs)
 
         dataloader = torch.utils.data.DataLoader(train_data.astype(np.float32), 
                                                  shuffle=True, 
                                                  batch_size=self.args.batch_size)
         total_steps = len(dataloader)
-        criterion = torch.nn.BCELoss().to(self.args.device)
 
-        d_losses = np.zeros(epochs)
-        g_losses = np.zeros(epochs)
-        real_scores = np.zeros(epochs)
-        fake_scores = np.zeros(epochs)
-
-        steps_per_epoch = max(len(train_data) // self._batch_size, 1)
-        for epoch in epoch_iterator:
+        for epoch in range(curr_epoch, epochs):
             for i, real_samples in enumerate(dataloader):
                 real_samples = Variable(real_samples.to(self.args.device))
 
                 num_samples = real_samples.shape[0]
-                real_labels = torch.ones(num_samples, 1).to(self.args.device)
-                real_labels = Variable(real_labels)
-                fake_labels = torch.zeros(num_samples, 1).to(self.args.device)
-                fake_labels = Variable(fake_labels)
 
                 fakez = torch.randn(num_samples, self.args.embedding_dim).to(self.args.device)
                 fake = self._generator(fakez)
@@ -244,39 +240,30 @@ class CTGAN(BaseSynthesizer):
                 loss_g.backward()
                 optimizerG.step()
 
-            d_losses[epoch] = d_losses[epoch]*(i/(i+1.)) + loss_d.item()*(1./(i+1.))
-            g_losses[epoch] = g_losses[epoch]*(i/(i+1.)) + loss_g.item()*(1./(i+1.))
-            real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
-            fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
+                d_losses[epoch] = d_losses[epoch]*(i/(i+1.)) + loss_d.item()*(1./(i+1.))
+                g_losses[epoch] = g_losses[epoch]*(i/(i+1.)) + loss_g.item()*(1./(i+1.))
+                real_scores[epoch] = real_scores[epoch]*(i/(i+1.)) + real_score.mean().item()*(1./(i+1.))
+                fake_scores[epoch] = fake_scores[epoch]*(i/(i+1.)) + fake_score.mean().item()*(1./(i+1.))
+                
+                if (i+1) % self.args.display_intervals == 0:
+                    print('Epoch [{}/{}], Step [{}/{}], loss_d: {:.4f}, loss_g: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+                        .format(epoch, epochs, i+1, total_steps, loss_d.item(), loss_g.item(), 
+                                real_score.mean().item(), fake_score.mean().item()))
+
+            save_plots(d_losses, g_losses, fake_scores, real_scores, 
+                       epoch, self.args.output_path, self.args.model_name)
             
-            if (i+1) % self.args.display_intervals == 0:
-                print('Epoch [{}/{}], Step [{}/{}], loss_d: {:.4f}, loss_g: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
-                    .format(epoch, epochs, i+1, total_steps, loss_d.item(), loss_g.item(), 
-                            real_score.mean().item(), fake_score.mean().item()))
-
-            # save_plots(d_losses, g_losses, fake_scores, real_scores, 
-            #         i, self.args.output_path, self.args.model_name)
-
-
-            generator_loss = loss_g.detach().cpu()
-            discriminator_loss = loss_d.detach().cpu()
-
-            epoch_loss_df = pd.DataFrame({
-                'Epoch': [i],
-                'Generator Loss': [generator_loss],
-                'Discriminator Loss': [discriminator_loss]
-            })
-            if not self.loss_values.empty:
-                self.loss_values = pd.concat(
-                    [self.loss_values, epoch_loss_df]
-                ).reset_index(drop=True)
-            else:
-                self.loss_values = epoch_loss_df
-
-            if self._verbose:
-                epoch_iterator.set_description(
-                    description.format(gen=generator_loss, dis=discriminator_loss)
-                )
+            save_model(self._generator,
+                       discriminator,
+                       optimizerG,
+                       optimizerD,
+                       epoch,
+                       self.args.output_path,
+                       self.args.model_name,
+                       d_losses,
+                       g_losses,
+                       real_scores,
+                       fake_scores,)
 
     @random_state
     def sample(self, n, condition_column=None, condition_value=None):
