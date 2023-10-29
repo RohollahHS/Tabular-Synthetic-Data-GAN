@@ -25,7 +25,7 @@ def parse_option():
     parser.add_argument('--data_path', type=str, help='path to dataset', default='data')
     parser.add_argument('--output_path', default='data', type=str, metavar='PATH')
 
-    parser.add_argument('--all_data', type=str, default=False, choices=[True, False])
+    parser.add_argument('--all_data', type=bool, default=False, choices=[True, False])
 
     parser.add_argument('--resume', help='resume from checkpoint', default=False, choices=[True, False])
     parser.add_argument('--display_intervals', default=1)
