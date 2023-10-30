@@ -47,6 +47,8 @@ def parse_option():
     parser.add_argument('--discriminator_n_layers', default=2)
     parser.add_argument('--discriminator_drop_prob', default=0.2)
 
+    parser.add_argument('--synthesize_by_best_model', default=True, choices=[True, False], type=bool)
+
     args = parser.parse_args()
     
     print('Args:')

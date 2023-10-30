@@ -5,17 +5,15 @@ import warnings
 import numpy as np
 import pandas as pd
 import torch
-from torch.autograd import Variable
 from torch import optim
 from torch.nn import functional
-from tqdm import tqdm
 
 from ctgan.data_sampler import DataSampler
 from ctgan.data_transformer import DataTransformer
 from ctgan.synthesizers.base import BaseSynthesizer, random_state
 from utils.save_records import save_plots
 from modules.modules import Discriminator, Generator
-from utils.save_load_model import load_checkpoint, save_model
+from utils.save_load_model import load_checkpoint, save_model, SaveBestModel, load_best_generator
 
 
 
@@ -173,6 +171,8 @@ class CTGAN(BaseSynthesizer):
         if not os.path.exists(self.args.output_path):
             os.mkdir(f'{self.args.output_path}')
         
+        save_best_model = SaveBestModel()
+
         if self.args.resume:
             (self._generator, 
              discriminator, 
@@ -283,26 +283,43 @@ class CTGAN(BaseSynthesizer):
                 
                 if (i+1) % self.args.display_intervals == 0:
                     print('Epoch [{}/{}], Step [{}/{}], loss_d: {:.4f}, loss_g: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
-                        .format(epoch, epochs, i+1, steps_per_epoch, loss_d.item(), loss_g.item(), 
+                        .format(epoch+1, epochs, i+1, steps_per_epoch, loss_d.item(), loss_g.item(), 
                                 real_score.mean().item(), fake_score.mean().item()))
 
-            # save_plots(d_losses, g_losses, fake_scores, real_scores, 
-            #            epoch, self.args.output_path, self.args.model_name)
+            save_plots(d_losses, g_losses, fake_scores, real_scores, 
+                       epoch, self.args.output_path, self.args.model_name)
             
-            # save_model(self._generator,
-            #            discriminator,
-            #            optimizerG,
-            #            optimizerD,
-            #            epoch,
-            #            self.args.output_path,
-            #            self.args.model_name,
-            #            d_losses,
-            #            g_losses,
-            #            real_scores,
-            #            fake_scores,)
+            save_model(self._generator,
+                       discriminator,
+                       optimizerG,
+                       optimizerD,
+                       epoch,
+                       self.args.output_path,
+                       self.args.model_name,
+                       d_losses,
+                       g_losses,
+                       real_scores,
+                       fake_scores,)
+                       
+            save_best_model(g_losses[epoch],
+                            self._generator,
+                            discriminator,
+                            optimizerG,
+                            optimizerD,
+                            epoch,
+                            self.args.output_path,
+                            self.args.model_name,
+                            d_losses,
+                            g_losses,
+                            real_scores,
+                            fake_scores,)
+                       
 
     @random_state
     def sample(self, n):
+        if self.args.synthesize_by_best_model:
+            self._generator = load_best_generator(self._generator, self.args)
+        
         steps = n // self._batch_size + 1
         data = []
         for i in range(steps):
